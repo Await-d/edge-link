@@ -7,7 +7,12 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "format": "prettier --write \"src/**/*.{ts,tsx,css}\""
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
+    "release": "standard-version",
+    "release:major": "standard-version --release-as major",
+    "release:minor": "standard-version --release-as minor",
+    "release:patch": "standard-version --release-as patch",
+    "release:first": "standard-version --first-release"
   },
   "dependencies": {
     "react": "^19.0.0",
@@ -34,6 +39,9 @@
     "eslint": "^8.55.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",
-    "prettier": "^3.1.1"
+    "prettier": "^3.1.1",
+    "standard-version": "^9.5.0",
+    "conventional-changelog-cli": "^2.2.2",
+    "js-yaml": "^4.1.0"
   }
 }

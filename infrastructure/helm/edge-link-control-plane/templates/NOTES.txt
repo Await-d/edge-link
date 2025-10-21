@@ -1,0 +1,205 @@
+================================================================================
+EdgeLink Control Plane has been installed successfully!
+================================================================================
+
+Chart Version: {{ .Chart.Version }}
+App Version: {{ .Chart.AppVersion }}
+Release Name: {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+
+--------------------------------------------------------------------------------
+SERVICES DEPLOYED
+--------------------------------------------------------------------------------
+
+{{- if .Values.apiGateway.enabled }}
+  - API Gateway ({{ .Values.apiGateway.replicaCount }} replicas)
+{{- end }}
+{{- if .Values.deviceService.enabled }}
+  - Device Service ({{ .Values.deviceService.replicaCount }} replicas)
+{{- end }}
+{{- if .Values.topologyService.enabled }}
+  - Topology Service ({{ .Values.topologyService.replicaCount }} replicas)
+{{- end }}
+{{- if .Values.natCoordinator.enabled }}
+  - NAT Coordinator ({{ .Values.natCoordinator.replicaCount }} replicas)
+{{- end }}
+{{- if .Values.alertService.enabled }}
+  - Alert Service ({{ .Values.alertService.replicaCount }} replicas)
+{{- end }}
+{{- if .Values.backgroundWorker.enabled }}
+  - Background Worker ({{ .Values.backgroundWorker.replicaCount }} replicas)
+{{- end }}
+{{- if .Values.frontend.enabled }}
+  - Frontend UI ({{ .Values.frontend.replicaCount }} replicas)
+{{- end }}
+
+--------------------------------------------------------------------------------
+DATABASES
+--------------------------------------------------------------------------------
+
+{{- if .Values.postgresql.enabled }}
+PostgreSQL:
+  Connection: {{ include "edge-link-control-plane.fullname" . }}-postgresql:5432
+  Database: {{ .Values.postgresql.auth.database }}
+  Username: {{ .Values.postgresql.auth.username }}
+
+  To get the password:
+    export POSTGRES_PASSWORD=$(kubectl get secret --namespace {{ .Release.Namespace }} {{ include "edge-link-control-plane.fullname" . }}-postgresql -o jsonpath="{.data.password}" | base64 -d)
+{{- end }}
+
+{{- if .Values.redis.enabled }}
+Redis:
+  Connection: {{ include "edge-link-control-plane.fullname" . }}-redis-master:6379
+
+  To connect:
+    kubectl run --namespace {{ .Release.Namespace }} redis-client --rm --tty -i --restart='Never' \
+      --image docker.io/bitnami/redis:7.0 -- bash
+    redis-cli -h {{ include "edge-link-control-plane.fullname" . }}-redis-master
+{{- end }}
+
+--------------------------------------------------------------------------------
+ACCESS YOUR APPLICATION
+--------------------------------------------------------------------------------
+
+{{- if .Values.ingress.enabled }}
+{{- range .Values.ingress.hosts }}
+  Application URL: https://{{ .host }}
+  API Endpoint: https://{{ .host }}/api
+  WebSocket: wss://{{ .host }}/ws
+{{- end }}
+
+{{- if .Values.certManager.enabled }}
+  TLS Certificate: Managed by cert-manager ({{ .Values.certManager.issuer }})
+{{- end }}
+
+{{- else }}
+
+To access the application, you need to expose the services:
+
+1. Forward API Gateway port:
+   kubectl port-forward --namespace {{ .Release.Namespace }} svc/{{ include "edge-link-control-plane.fullname" . }}-api-gateway {{ .Values.apiGateway.service.port }}:{{ .Values.apiGateway.service.port }}
+
+2. Forward Frontend port:
+   kubectl port-forward --namespace {{ .Release.Namespace }} svc/{{ include "edge-link-control-plane.fullname" . }}-frontend {{ .Values.frontend.service.port }}:{{ .Values.frontend.service.port }}
+
+Then access:
+   API: http://localhost:{{ .Values.apiGateway.service.port }}
+   UI: http://localhost:{{ .Values.frontend.service.port }}
+
+Or create an Ingress by setting ingress.enabled=true
+{{- end }}
+
+--------------------------------------------------------------------------------
+MONITORING & ALERTS
+--------------------------------------------------------------------------------
+
+{{- if .Values.monitoring.prometheusRules.enabled }}
+  Prometheus Rules: Enabled
+  - High error rate alerts
+  - Latency degradation alerts
+  - Resource usage alerts
+{{- end }}
+
+{{- if .Values.monitoring.autoRollback.enabled }}
+  Auto-Rollback: {{ if .Values.monitoring.autoRollback.dryRun }}Enabled (Dry Run Mode){{ else }}Enabled (Active){{ end }}
+  Max Retries: {{ .Values.monitoring.autoRollback.maxRetries }}
+  Timeout: {{ .Values.monitoring.autoRollback.timeout }}s
+{{- end }}
+
+{{- if .Values.serviceMonitor.enabled }}
+  ServiceMonitor: Enabled (for Prometheus Operator)
+{{- end }}
+
+{{- if or .Values.monitoring.alerting.slack.enabled .Values.monitoring.alerting.email.enabled .Values.monitoring.alerting.pagerduty.enabled }}
+  Alert Integrations:
+  {{- if .Values.monitoring.alerting.slack.enabled }}
+    - Slack ({{ .Values.monitoring.alerting.slack.channel }})
+  {{- end }}
+  {{- if .Values.monitoring.alerting.email.enabled }}
+    - Email ({{ .Values.monitoring.alerting.email.to }})
+  {{- end }}
+  {{- if .Values.monitoring.alerting.pagerduty.enabled }}
+    - PagerDuty
+  {{- end }}
+{{- end }}
+
+--------------------------------------------------------------------------------
+AUTOSCALING
+--------------------------------------------------------------------------------
+
+{{- if or .Values.apiGateway.autoscaling.enabled .Values.deviceService.autoscaling.enabled .Values.topologyService.autoscaling.enabled .Values.natCoordinator.autoscaling.enabled .Values.frontend.autoscaling.enabled }}
+Horizontal Pod Autoscaling is enabled for:
+  {{- if .Values.apiGateway.autoscaling.enabled }}
+  - API Gateway: {{ .Values.apiGateway.autoscaling.minReplicas }}-{{ .Values.apiGateway.autoscaling.maxReplicas }} replicas (CPU: {{ .Values.apiGateway.autoscaling.targetCPUUtilizationPercentage }}%)
+  {{- end }}
+  {{- if .Values.deviceService.autoscaling.enabled }}
+  - Device Service: {{ .Values.deviceService.autoscaling.minReplicas }}-{{ .Values.deviceService.autoscaling.maxReplicas }} replicas (CPU: {{ .Values.deviceService.autoscaling.targetCPUUtilizationPercentage }}%)
+  {{- end }}
+  {{- if .Values.topologyService.autoscaling.enabled }}
+  - Topology Service: {{ .Values.topologyService.autoscaling.minReplicas }}-{{ .Values.topologyService.autoscaling.maxReplicas }} replicas (CPU: {{ .Values.topologyService.autoscaling.targetCPUUtilizationPercentage }}%)
+  {{- end }}
+  {{- if .Values.natCoordinator.autoscaling.enabled }}
+  - NAT Coordinator: {{ .Values.natCoordinator.autoscaling.minReplicas }}-{{ .Values.natCoordinator.autoscaling.maxReplicas }} replicas (CPU: {{ .Values.natCoordinator.autoscaling.targetCPUUtilizationPercentage }}%)
+  {{- end }}
+  {{- if .Values.frontend.autoscaling.enabled }}
+  - Frontend: {{ .Values.frontend.autoscaling.minReplicas }}-{{ .Values.frontend.autoscaling.maxReplicas }} replicas (CPU: {{ .Values.frontend.autoscaling.targetCPUUtilizationPercentage }}%)
+  {{- end }}
+{{- end }}
+
+--------------------------------------------------------------------------------
+USEFUL COMMANDS
+--------------------------------------------------------------------------------
+
+Check all pods status:
+  kubectl get pods --namespace {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}
+
+View logs for API Gateway:
+  kubectl logs --namespace {{ .Release.Namespace }} -l app.kubernetes.io/component=api-gateway --tail=100 -f
+
+View logs for Device Service:
+  kubectl logs --namespace {{ .Release.Namespace }} -l app.kubernetes.io/component=device-service --tail=100 -f
+
+Execute database migrations:
+  kubectl exec --namespace {{ .Release.Namespace }} -it deployment/{{ include "edge-link-control-plane.fullname" . }}-api-gateway -- /app/migrate
+
+Check service health:
+  kubectl run --namespace {{ .Release.Namespace }} curl --rm -it --image=curlimages/curl --restart=Never -- \
+    curl http://{{ include "edge-link-control-plane.fullname" . }}-api-gateway:{{ .Values.apiGateway.service.port }}/health
+
+Upgrade this release:
+  helm upgrade {{ .Release.Name }} edge-link-control-plane --namespace {{ .Release.Namespace }}
+
+Uninstall this release:
+  helm uninstall {{ .Release.Name }} --namespace {{ .Release.Namespace }}
+
+--------------------------------------------------------------------------------
+NEXT STEPS
+--------------------------------------------------------------------------------
+
+1. Verify all pods are running:
+   kubectl get pods -n {{ .Release.Namespace }} -w
+
+2. Check service endpoints:
+   kubectl get svc -n {{ .Release.Namespace }}
+
+3. Register your first device using the desktop client:
+   edgelink-cli register --server https://{{ (index .Values.ingress.hosts 0).host | default "localhost" }}/api
+
+4. View the management UI:
+   {{- if .Values.ingress.enabled }}
+   Open https://{{ (index .Values.ingress.hosts 0).host }}
+   {{- else }}
+   kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "edge-link-control-plane.fullname" . }}-frontend {{ .Values.frontend.service.port }}:{{ .Values.frontend.service.port }}
+   Open http://localhost:{{ .Values.frontend.service.port }}
+   {{- end }}
+
+5. Monitor system health:
+   {{- if .Values.serviceMonitor.enabled }}
+   Access Prometheus/Grafana dashboards
+   {{- else }}
+   kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/name=edge-link-control-plane -f
+   {{- end }}
+
+================================================================================
+For more information, visit: https://github.com/edgelink/edge-link
+================================================================================

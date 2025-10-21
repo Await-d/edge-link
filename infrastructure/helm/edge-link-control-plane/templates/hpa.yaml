@@ -1,0 +1,189 @@
+{{- if .Values.apiGateway.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "edge-link-control-plane.fullname" . }}-api-gateway
+  labels:
+    {{- include "edge-link-control-plane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api-gateway
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "edge-link-control-plane.fullname" . }}-api-gateway
+  minReplicas: {{ .Values.apiGateway.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.apiGateway.autoscaling.maxReplicas }}
+  metrics:
+    {{- if .Values.apiGateway.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.apiGateway.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.apiGateway.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.apiGateway.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+  {{- with .Values.apiGateway.autoscaling.behavior }}
+  behavior:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+---
+{{- end }}
+{{- if .Values.deviceService.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "edge-link-control-plane.fullname" . }}-device-service
+  labels:
+    {{- include "edge-link-control-plane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: device-service
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "edge-link-control-plane.fullname" . }}-device-service
+  minReplicas: {{ .Values.deviceService.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.deviceService.autoscaling.maxReplicas }}
+  metrics:
+    {{- if .Values.deviceService.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.deviceService.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.deviceService.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.deviceService.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+  {{- with .Values.deviceService.autoscaling.behavior }}
+  behavior:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+---
+{{- end }}
+{{- if .Values.topologyService.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "edge-link-control-plane.fullname" . }}-topology-service
+  labels:
+    {{- include "edge-link-control-plane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: topology-service
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "edge-link-control-plane.fullname" . }}-topology-service
+  minReplicas: {{ .Values.topologyService.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.topologyService.autoscaling.maxReplicas }}
+  metrics:
+    {{- if .Values.topologyService.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.topologyService.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.topologyService.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.topologyService.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+  {{- with .Values.topologyService.autoscaling.behavior }}
+  behavior:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+---
+{{- end }}
+{{- if .Values.natCoordinator.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "edge-link-control-plane.fullname" . }}-nat-coordinator
+  labels:
+    {{- include "edge-link-control-plane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nat-coordinator
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "edge-link-control-plane.fullname" . }}-nat-coordinator
+  minReplicas: {{ .Values.natCoordinator.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.natCoordinator.autoscaling.maxReplicas }}
+  metrics:
+    {{- if .Values.natCoordinator.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.natCoordinator.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.natCoordinator.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.natCoordinator.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+  {{- with .Values.natCoordinator.autoscaling.behavior }}
+  behavior:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+---
+{{- end }}
+{{- if .Values.frontend.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "edge-link-control-plane.fullname" . }}-frontend
+  labels:
+    {{- include "edge-link-control-plane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "edge-link-control-plane.fullname" . }}-frontend
+  minReplicas: {{ .Values.frontend.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.frontend.autoscaling.maxReplicas }}
+  metrics:
+    {{- if .Values.frontend.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.frontend.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.frontend.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.frontend.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+  {{- with .Values.frontend.autoscaling.behavior }}
+  behavior:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

@@ -52,6 +52,18 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Version: $VERSION"
 
+          # Also get version from VERSION file for comparison
+          if [[ -f VERSION ]]; then
+            FILE_VERSION=$(cat VERSION | tr -d '[:space:]')
+            echo "VERSION file contains: $FILE_VERSION"
+
+            # Strip 'v' prefix for comparison
+            TAG_VERSION="${VERSION#v}"
+            if [[ "$FILE_VERSION" != "$TAG_VERSION" ]]; then
+              echo "::warning::VERSION file ($FILE_VERSION) does not match tag ($TAG_VERSION)"
+            fi
+          fi
+
       - name: Check if pre-release
         id: check_prerelease
         run: |
@@ -73,8 +85,36 @@ jobs:
       - name: Check for CHANGELOG entry
         run: |
           VERSION="${{ steps.get_version.outputs.version }}"
-          if ! grep -q "$VERSION" CHANGELOG.md; then
-            echo "::warning::No CHANGELOG entry found for $VERSION"
+          if [[ -f CHANGELOG.md ]]; then
+            if ! grep -q "$VERSION" CHANGELOG.md; then
+              echo "::warning::No CHANGELOG entry found for $VERSION"
+            else
+              echo "✓ CHANGELOG entry exists for $VERSION"
+            fi
+          else
+            echo "::warning::CHANGELOG.md not found"
+          fi
+
+      - name: Verify version consistency
+        run: |
+          ./scripts/get-version.sh --json | jq .
+
+          # Check VERSION file
+          if [[ ! -f VERSION ]]; then
+            echo "::warning::VERSION file not found"
+          fi
+
+          # Run version verification
+          CURRENT_VERSION=$(./scripts/get-version.sh --short)
+          TAG_VERSION="${{ steps.get_version.outputs.version }}"
+          TAG_VERSION="${TAG_VERSION#v}"
+
+          echo "Current version: $CURRENT_VERSION"
+          echo "Tag version: $TAG_VERSION"
+
+          if [[ "$CURRENT_VERSION" != "$TAG_VERSION" ]]; then
+            echo "::error::Version mismatch: VERSION file shows $CURRENT_VERSION but tag is $TAG_VERSION"
+            exit 1
           fi
 
   # Run all tests before release
@@ -274,6 +314,51 @@ jobs:
           path: release/
           retention-days: 90
 
+  # Prepare release (version bump and changelog)
+  prepare-release:
+    name: Prepare Release
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump version
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          VERSION="${VERSION#v}"  # Remove 'v' prefix
+
+          echo "Bumping to version: $VERSION"
+
+          # Update VERSION file and all version references
+          echo "$VERSION" > VERSION
+          ./scripts/bump-version.sh --current || true
+          ./scripts/bump-version.sh patch --no-git || true
+
+      - name: Generate CHANGELOG
+        run: |
+          ./scripts/generate-changelog.sh
+
+      - name: Commit version bump and CHANGELOG
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+
+          git add VERSION frontend/package.json infrastructure/helm/*/Chart.yaml CHANGELOG.md
+          git commit -m "chore(release): prepare release $VERSION" || echo "No changes to commit"
+
+      - name: Push changes
+        run: |
+          git push origin HEAD:${{ github.ref_name }}
+
   # Generate release notes
   generate-release-notes:
     name: Generate Release Notes
@@ -287,8 +372,30 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Generate release notes
+      - name: Generate release notes from CHANGELOG
         id: notes
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+
+          # Try to extract from CHANGELOG.md first
+          if [[ -f CHANGELOG.md ]] && grep -q "$VERSION" CHANGELOG.md; then
+            # Extract section for this version from CHANGELOG
+            NOTES=$(sed -n "/## \[${VERSION#v}\]/,/## \[/p" CHANGELOG.md | sed '$d')
+
+            if [[ -n "$NOTES" ]]; then
+              echo "notes<<EOF" >> $GITHUB_OUTPUT
+              echo "$NOTES" >> $GITHUB_OUTPUT
+              echo "EOF" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+          fi
+
+          # Fallback: generate from git log
+          echo "CHANGELOG not found, generating from git log..."
+
+      - name: Generate release notes from git (fallback)
+        if: steps.notes.outputs.notes == ''
+        id: notes-fallback
         uses: actions/github-script@v7
         with:
           script: |

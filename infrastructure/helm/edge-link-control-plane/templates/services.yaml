@@ -7,6 +7,10 @@ metadata:
   labels:
     {{- include "edge-link-control-plane.labels" . | nindent 4 }}
     app.kubernetes.io/component: api-gateway
+  {{- if .Values.apiGateway.service.annotations }}
+  annotations:
+    {{- toYaml .Values.apiGateway.service.annotations | nindent 4 }}
+  {{- end }}
 spec:
   type: {{ .Values.apiGateway.service.type }}
   ports:
@@ -30,6 +34,10 @@ metadata:
   labels:
     {{- include "edge-link-control-plane.labels" . | nindent 4 }}
     app.kubernetes.io/component: device-service
+  {{- if .Values.deviceService.service.annotations }}
+  annotations:
+    {{- toYaml .Values.deviceService.service.annotations | nindent 4 }}
+  {{- end }}
 spec:
   type: {{ .Values.deviceService.service.type }}
   ports:
@@ -53,6 +61,10 @@ metadata:
   labels:
     {{- include "edge-link-control-plane.labels" . | nindent 4 }}
     app.kubernetes.io/component: topology-service
+  {{- if .Values.topologyService.service.annotations }}
+  annotations:
+    {{- toYaml .Values.topologyService.service.annotations | nindent 4 }}
+  {{- end }}
 spec:
   type: {{ .Values.topologyService.service.type }}
   ports:
@@ -76,6 +88,10 @@ metadata:
   labels:
     {{- include "edge-link-control-plane.labels" . | nindent 4 }}
     app.kubernetes.io/component: nat-coordinator
+  {{- if .Values.natCoordinator.service.annotations }}
+  annotations:
+    {{- toYaml .Values.natCoordinator.service.annotations | nindent 4 }}
+  {{- end }}
 spec:
   type: {{ .Values.natCoordinator.service.type }}
   ports:

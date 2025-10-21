@@ -1,0 +1,104 @@
+{{- if .Values.apiGateway.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "edge-link-control-plane.fullname" . }}-api-gateway
+  labels:
+    {{- include "edge-link-control-plane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api-gateway
+spec:
+  {{- if .Values.apiGateway.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.apiGateway.podDisruptionBudget.minAvailable }}
+  {{- end }}
+  {{- if .Values.apiGateway.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.apiGateway.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "edge-link-control-plane.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api-gateway
+---
+{{- end }}
+{{- if .Values.deviceService.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "edge-link-control-plane.fullname" . }}-device-service
+  labels:
+    {{- include "edge-link-control-plane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: device-service
+spec:
+  {{- if .Values.deviceService.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.deviceService.podDisruptionBudget.minAvailable }}
+  {{- end }}
+  {{- if .Values.deviceService.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.deviceService.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "edge-link-control-plane.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: device-service
+---
+{{- end }}
+{{- if .Values.topologyService.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "edge-link-control-plane.fullname" . }}-topology-service
+  labels:
+    {{- include "edge-link-control-plane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: topology-service
+spec:
+  {{- if .Values.topologyService.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.topologyService.podDisruptionBudget.minAvailable }}
+  {{- end }}
+  {{- if .Values.topologyService.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.topologyService.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "edge-link-control-plane.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: topology-service
+---
+{{- end }}
+{{- if .Values.natCoordinator.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "edge-link-control-plane.fullname" . }}-nat-coordinator
+  labels:
+    {{- include "edge-link-control-plane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nat-coordinator
+spec:
+  {{- if .Values.natCoordinator.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.natCoordinator.podDisruptionBudget.minAvailable }}
+  {{- end }}
+  {{- if .Values.natCoordinator.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.natCoordinator.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "edge-link-control-plane.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: nat-coordinator
+---
+{{- end }}
+{{- if .Values.frontend.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "edge-link-control-plane.fullname" . }}-frontend
+  labels:
+    {{- include "edge-link-control-plane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+spec:
+  {{- if .Values.frontend.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.frontend.podDisruptionBudget.minAvailable }}
+  {{- end }}
+  {{- if .Values.frontend.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.frontend.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "edge-link-control-plane.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: frontend
+{{- end }}
