@@ -1,0 +1,138 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:14-alpine
+    container_name: edgelink-postgres
+    environment:
+      POSTGRES_USER: edgelink
+      POSTGRES_PASSWORD: edgelink_dev_password
+      POSTGRES_DB: edgelink
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U edgelink"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - edgelink-network
+
+  # Redis 缓存和Pub/Sub
+  redis:
+    image: redis:7-alpine
+    container_name: edgelink-redis
+    command: redis-server --appendonly yes --requirepass edgelink_redis_password
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - edgelink-network
+
+  # MinIO 对象存储（用于诊断包）
+  minio:
+    image: minio/minio:latest
+    container_name: edgelink-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: edgelink
+      MINIO_ROOT_PASSWORD: edgelink_minio_password
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - edgelink-network
+
+  # Coturn STUN/TURN 服务器
+  coturn:
+    image: coturn/coturn:latest
+    container_name: edgelink-coturn
+    ports:
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+      - "49152-49200:49152-49200/udp"
+    environment:
+      - DETECT_RELAY_IP=yes
+    command:
+      - "-n"
+      - "--log-file=stdout"
+      - "--external-ip=$$(detect-external-ip)"
+      - "--listening-port=3478"
+      - "--fingerprint"
+      - "--lt-cred-mech"
+      - "--user=edgelink:edgelink_turn_password"
+      - "--realm=edgelink.local"
+      - "--no-stun"
+    networks:
+      - edgelink-network
+
+  # Prometheus（可选 - 用于监控）
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: edgelink-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - edgelink-network
+    profiles:
+      - monitoring
+
+  # Grafana（可选 - 用于可视化）
+  grafana:
+    image: grafana/grafana:latest
+    container_name: edgelink-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - edgelink-network
+    profiles:
+      - monitoring
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  minio_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  edgelink-network:
+    driver: bridge

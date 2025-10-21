@@ -1,0 +1,25 @@
+apiVersion: v2
+name: edge-link-control-plane
+description: EdgeLink Control Plane - P2P VPN Coordination System
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - wireguard
+  - vpn
+  - p2p
+  - nat-traversal
+maintainers:
+  - name: EdgeLink Team
+    email: team@edgelink.example.com
+sources:
+  - https://github.com/edgelink/edge-link
+dependencies:
+  - name: postgresql
+    version: "12.x.x"
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled
+  - name: redis
+    version: "17.x.x"
+    repository: https://charts.bitnami.com/bitnami
+    condition: redis.enabled

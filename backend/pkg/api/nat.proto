@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+package edgelink.nat.v1;
+
+option go_package = "github.com/edgelink/backend/pkg/api/natpb";
+
+import "google/protobuf/timestamp.proto";
+
+// NATCoordinatorService NAT协调gRPC服务
+service NATCoordinatorService {
+  // ProbeNATType 探测NAT类型
+  rpc ProbeNATType(ProbeNATTypeRequest) returns (ProbeNATTypeResponse);
+
+  // CoordinateHolePunching 协调UDP打洞
+  rpc CoordinateHolePunching(CoordinateHolePunchingRequest) returns (CoordinateHolePunchingResponse);
+
+  // UpdatePublicEndpoint 更新公网端点
+  rpc UpdatePublicEndpoint(UpdatePublicEndpointRequest) returns (UpdatePublicEndpointResponse);
+
+  // CleanupExpiredSessions 清理过期会话
+  rpc CleanupExpiredSessions(CleanupExpiredSessionsRequest) returns (CleanupExpiredSessionsResponse);
+}
+
+// NATType NAT类型枚举
+enum NATType {
+  NAT_TYPE_UNKNOWN = 0;
+  NAT_TYPE_NONE = 1;
+  NAT_TYPE_FULL_CONE = 2;
+  NAT_TYPE_RESTRICTED_CONE = 3;
+  NAT_TYPE_PORT_RESTRICTED_CONE = 4;
+  NAT_TYPE_SYMMETRIC = 5;
+}
+
+// ProbeNATTypeRequest 探测NAT类型请求
+message ProbeNATTypeRequest {
+  string device_id = 1;
+  string local_endpoint = 2;
+}
+
+// ProbeNATTypeResponse 探测NAT类型响应
+message ProbeNATTypeResponse {
+  string device_id = 1;
+  NATType nat_type = 2;
+  string public_endpoint = 3;
+  google.protobuf.Timestamp probe_time = 4;
+}
+
+// CoordinateHolePunchingRequest 协调打洞请求
+message CoordinateHolePunchingRequest {
+  string device_a_id = 1;
+  string device_b_id = 2;
+}
+
+// CoordinateHolePunchingResponse 协调打洞响应
+message CoordinateHolePunchingResponse {
+  string session_id = 1;
+  string method = 2; // "direct", "stun", "turn"
+  bool can_punch = 3;
+  string endpoint_a = 4;
+  string endpoint_b = 5;
+  TURNAllocation turn_relay = 6;
+  google.protobuf.Timestamp coordinated_at = 7;
+}
+
+// TURNAllocation TURN中继分配
+message TURNAllocation {
+  string relay_address = 1;
+  string username = 2;
+  string password = 3;
+  int64 lifetime_seconds = 4;
+}
+
+// UpdatePublicEndpointRequest 更新公网端点请求
+message UpdatePublicEndpointRequest {
+  string device_id = 1;
+  string endpoint = 2;
+}
+
+// UpdatePublicEndpointResponse 更新公网端点响应
+message UpdatePublicEndpointResponse {
+  bool success = 1;
+}
+
+// CleanupExpiredSessionsRequest 清理过期会话请求
+message CleanupExpiredSessionsRequest {
+  // 无参数，清理所有过期会话
+}
+
+// CleanupExpiredSessionsResponse 清理过期会话响应
+message CleanupExpiredSessionsResponse {
+  int32 sessions_cleaned = 1;
+}

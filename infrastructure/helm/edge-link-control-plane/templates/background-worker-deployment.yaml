@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "edge-link.fullname" . }}-background-worker
+  labels:
+    {{- include "edge-link.labels" . | nindent 4 }}
+    app.kubernetes.io/component: background-worker
+spec:
+  replicas: {{ .Values.backgroundWorker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "edge-link.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: background-worker
+  template:
+    metadata:
+      labels:
+        {{- include "edge-link.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: background-worker
+    spec:
+      serviceAccountName: {{ include "edge-link.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.backgroundWorker.podSecurityContext | nindent 8 }}
+      containers:
+      - name: background-worker
+        securityContext:
+          {{- toYaml .Values.backgroundWorker.securityContext | nindent 12 }}
+        image: "{{ .Values.backgroundWorker.image.repository }}:{{ .Values.backgroundWorker.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.backgroundWorker.image.pullPolicy }}
+        env:
+        - name: DB_HOST
+          value: {{ .Values.postgresql.host | quote }}
+        - name: DB_PORT
+          value: {{ .Values.postgresql.port | quote }}
+        - name: DB_NAME
+          value: {{ .Values.postgresql.database | quote }}
+        - name: DB_USER
+          value: {{ .Values.postgresql.username | quote }}
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.postgresql.existingSecret | default (include "edge-link.fullname" .) }}
+              key: postgresql-password
+        - name: REDIS_HOST
+          value: {{ .Values.redis.host | quote }}
+        - name: REDIS_PORT
+          value: {{ .Values.redis.port | quote }}
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.redis.existingSecret | default (include "edge-link.fullname" .) }}
+              key: redis-password
+        - name: LOG_LEVEL
+          value: {{ .Values.backgroundWorker.logLevel | quote }}
+        resources:
+          {{- toYaml .Values.backgroundWorker.resources | nindent 12 }}
+      {{- with .Values.backgroundWorker.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backgroundWorker.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backgroundWorker.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

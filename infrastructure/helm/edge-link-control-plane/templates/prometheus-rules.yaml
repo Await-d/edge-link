@@ -1,0 +1,199 @@
+{{- if .Values.monitoring.prometheusRules.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "edge-link-control-plane.fullname" . }}-deployment-alerts
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "edge-link-control-plane.labels" . | nindent 4 }}
+    prometheus: kube-prometheus
+spec:
+  groups:
+    # Deployment Health Alerts
+    - name: edgelink.deployment.health
+      interval: 30s
+      rules:
+        # High Error Rate Alert
+        - alert: EdgeLinkHighErrorRate
+          expr: |
+            (
+              sum(rate(http_requests_total{job=~"edgelink-.*", status=~"5.."}[5m])) by (service)
+              /
+              sum(rate(http_requests_total{job=~"edgelink-.*"}[5m])) by (service)
+            ) > {{ .Values.monitoring.thresholds.errorRate }}
+          for: 2m
+          labels:
+            severity: critical
+            component: deployment
+            action: rollback
+          annotations:
+            summary: "High error rate detected in {{ "{{" }} $labels.service {{ "}}" }}"
+            description: "Service {{ "{{" }} $labels.service {{ "}}" }} has error rate {{ "{{" }} $value | humanizePercentage {{ "}}" }} (threshold: {{ .Values.monitoring.thresholds.errorRate | mul 100 }}%)"
+            runbook_url: "https://docs.edgelink.com/runbooks/high-error-rate"
+
+        # High Latency Alert
+        - alert: EdgeLinkHighLatency
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(http_request_duration_seconds_bucket{job=~"edgelink-.*"}[5m])) by (service, le)
+            ) > {{ .Values.monitoring.thresholds.p95Latency }}
+          for: 3m
+          labels:
+            severity: critical
+            component: deployment
+            action: rollback
+          annotations:
+            summary: "High P95 latency in {{ "{{" }} $labels.service {{ "}}" }}"
+            description: "Service {{ "{{" }} $labels.service {{ "}}" }} P95 latency is {{ "{{" }} $value | humanizeDuration {{ "}}" }} (threshold: {{ .Values.monitoring.thresholds.p95Latency }}s)"
+            runbook_url: "https://docs.edgelink.com/runbooks/high-latency"
+
+        # Pod CrashLoopBackOff Alert
+        - alert: EdgeLinkPodCrashLooping
+          expr: |
+            rate(kube_pod_container_status_restarts_total{namespace="{{ .Release.Namespace }}", pod=~"edgelink-.*"}[15m]) > 0
+          for: 1m
+          labels:
+            severity: critical
+            component: deployment
+            action: rollback
+          annotations:
+            summary: "Pod {{ "{{" }} $labels.pod {{ "}}" }} is crash looping"
+            description: "Pod {{ "{{" }} $labels.pod {{ "}}" }} has restarted {{ "{{" }} $value {{ "}}" }} times in the last 15 minutes"
+            runbook_url: "https://docs.edgelink.com/runbooks/pod-crash-loop"
+
+        # Deployment Replica Mismatch
+        - alert: EdgeLinkDeploymentReplicaMismatch
+          expr: |
+            (
+              kube_deployment_spec_replicas{namespace="{{ .Release.Namespace }}", deployment=~"edgelink-.*"}
+              !=
+              kube_deployment_status_replicas_available{namespace="{{ .Release.Namespace }}", deployment=~"edgelink-.*"}
+            )
+          for: 5m
+          labels:
+            severity: warning
+            component: deployment
+            action: investigate
+          annotations:
+            summary: "Deployment {{ "{{" }} $labels.deployment {{ "}}" }} replica count mismatch"
+            description: "Deployment {{ "{{" }} $labels.deployment {{ "}}" }} has {{ "{{" }} $value {{ "}}" }} unavailable replicas"
+
+        # Memory Usage Alert
+        - alert: EdgeLinkHighMemoryUsage
+          expr: |
+            (
+              container_memory_working_set_bytes{namespace="{{ .Release.Namespace }}", pod=~"edgelink-.*"}
+              /
+              container_spec_memory_limit_bytes{namespace="{{ .Release.Namespace }}", pod=~"edgelink-.*"}
+            ) > {{ .Values.monitoring.thresholds.memoryUsage }}
+          for: 5m
+          labels:
+            severity: warning
+            component: deployment
+            action: investigate
+          annotations:
+            summary: "High memory usage in {{ "{{" }} $labels.pod {{ "}}" }}"
+            description: "Pod {{ "{{" }} $labels.pod {{ "}}" }} memory usage is {{ "{{" }} $value | humanizePercentage {{ "}}" }}"
+
+        # CPU Throttling Alert
+        - alert: EdgeLinkCPUThrottling
+          expr: |
+            rate(container_cpu_cfs_throttled_seconds_total{namespace="{{ .Release.Namespace }}", pod=~"edgelink-.*"}[5m]) > {{ .Values.monitoring.thresholds.cpuThrottling }}
+          for: 3m
+          labels:
+            severity: warning
+            component: deployment
+            action: investigate
+          annotations:
+            summary: "CPU throttling in {{ "{{" }} $labels.pod {{ "}}" }}"
+            description: "Pod {{ "{{" }} $labels.pod {{ "}}" }} is being CPU throttled {{ "{{" }} $value | humanize {{ "}}" }}s per second"
+
+    # Application-Specific Alerts
+    - name: edgelink.application.health
+      interval: 30s
+      rules:
+        # Device Connection Failure Rate
+        - alert: EdgeLinkDeviceConnectionFailures
+          expr: |
+            (
+              sum(rate(edgelink_device_connection_failures_total[5m]))
+              /
+              sum(rate(edgelink_device_connection_attempts_total[5m]))
+            ) > 0.1
+          for: 5m
+          labels:
+            severity: warning
+            component: device-service
+            action: investigate
+          annotations:
+            summary: "High device connection failure rate"
+            description: "Device connection failure rate is {{ "{{" }} $value | humanizePercentage {{ "}}" }}"
+
+        # NAT Traversal Failures
+        - alert: EdgeLinkNATTraversalFailures
+          expr: |
+            (
+              sum(rate(edgelink_nat_traversal_failures_total[10m]))
+              /
+              sum(rate(edgelink_nat_traversal_attempts_total[10m]))
+            ) > 0.3
+          for: 5m
+          labels:
+            severity: warning
+            component: nat-coordinator
+            action: investigate
+          annotations:
+            summary: "High NAT traversal failure rate"
+            description: "NAT traversal failure rate is {{ "{{" }} $value | humanizePercentage {{ "}}" }}"
+
+        # Database Connection Pool Exhaustion
+        - alert: EdgeLinkDatabasePoolExhaustion
+          expr: |
+            (
+              edgelink_db_connections_in_use
+              /
+              edgelink_db_connections_max
+            ) > 0.9
+          for: 3m
+          labels:
+            severity: critical
+            component: database
+            action: investigate
+          annotations:
+            summary: "Database connection pool near exhaustion"
+            description: "Database pool usage is {{ "{{" }} $value | humanizePercentage {{ "}}" }}"
+
+        # Redis Connection Failures
+        - alert: EdgeLinkRedisConnectionFailures
+          expr: |
+            rate(edgelink_redis_connection_errors_total[5m]) > 1
+          for: 3m
+          labels:
+            severity: warning
+            component: redis
+            action: investigate
+          annotations:
+            summary: "Redis connection failures detected"
+            description: "Redis connection error rate is {{ "{{" }} $value {{ "}}" }} per second"
+
+    # Alertmanager Routing
+    - name: edgelink.alertmanager.routing
+      interval: 30s
+      rules:
+        # Auto-rollback trigger composite rule
+        - alert: EdgeLinkAutoRollbackTriggered
+          expr: |
+            ALERTS{alertname=~"EdgeLinkHighErrorRate|EdgeLinkHighLatency|EdgeLinkPodCrashLooping", action="rollback"}
+          for: 1m
+          labels:
+            severity: critical
+            component: deployment
+            action: auto-rollback
+            auto_rollback: "true"
+          annotations:
+            summary: "Auto-rollback triggered for EdgeLink deployment"
+            description: "Critical deployment issue detected, triggering automatic rollback"
+            rollback_reason: "{{ "{{" }} $labels.alertname {{ "}}" }}"
+
+{{- end }}

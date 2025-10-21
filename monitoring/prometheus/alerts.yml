@@ -1,0 +1,380 @@
+# EdgeLink Prometheus Alert Rules
+# Define alerting conditions for critical system states
+
+groups:
+  # Control Plane Service Health
+  - name: control_plane_health
+    interval: 30s
+    rules:
+      # API Gateway down
+      - alert: APIGatewayDown
+        expr: up{job="api-gateway"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: api-gateway
+        annotations:
+          summary: "API Gateway is down"
+          description: "API Gateway ({{ $labels.instance }}) has been down for more than 1 minute"
+
+      # Device Service down
+      - alert: DeviceServiceDown
+        expr: up{job="device-service"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: device-service
+        annotations:
+          summary: "Device Service is down"
+          description: "Device Service ({{ $labels.instance }}) has been down for more than 1 minute"
+
+      # Topology Service down
+      - alert: TopologyServiceDown
+        expr: up{job="topology-service"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: topology-service
+        annotations:
+          summary: "Topology Service is down"
+          description: "Topology Service ({{ $labels.instance }}) has been down for more than 1 minute"
+
+      # NAT Coordinator down
+      - alert: NATCoordinatorDown
+        expr: up{job="nat-coordinator"} == 0
+        for: 1m
+        labels:
+          severity: high
+          component: nat-coordinator
+        annotations:
+          summary: "NAT Coordinator is down"
+          description: "NAT Coordinator ({{ $labels.instance }}) has been down for more than 1 minute"
+
+  # Performance and Latency
+  - name: performance
+    interval: 30s
+    rules:
+      # High HTTP latency
+      - alert: HighHTTPLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+          component: api-gateway
+        annotations:
+          summary: "High HTTP request latency"
+          description: "95th percentile latency is {{ $value }}s on {{ $labels.instance }}"
+
+      # High gRPC latency
+      - alert: HighGRPCLatency
+        expr: histogram_quantile(0.95, rate(grpc_server_handling_seconds_bucket[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High gRPC request latency"
+          description: "95th percentile gRPC latency is {{ $value }}s on {{ $labels.job }} ({{ $labels.instance }})"
+
+      # High error rate
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m])) by (job, instance)
+            /
+            sum(rate(http_requests_total[5m])) by (job, instance)
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: high
+        annotations:
+          summary: "High HTTP error rate"
+          description: "Error rate is {{ $value | humanizePercentage }} on {{ $labels.job }} ({{ $labels.instance }})"
+
+  # Device Management
+  - name: device_management
+    interval: 1m
+    rules:
+      # High number of offline devices
+      - alert: HighOfflineDeviceRate
+        expr: |
+          (
+            sum(edgelink_devices_offline_total)
+            /
+            sum(edgelink_devices_total)
+          ) > 0.20
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High offline device rate"
+          description: "{{ $value | humanizePercentage }} of devices are offline"
+
+      # Critical number of offline devices
+      - alert: CriticalOfflineDeviceRate
+        expr: |
+          (
+            sum(edgelink_devices_offline_total)
+            /
+            sum(edgelink_devices_total)
+          ) > 0.50
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical offline device rate"
+          description: "{{ $value | humanizePercentage }} of devices are offline - potential network outage"
+
+      # Device registration failures
+      - alert: DeviceRegistrationFailures
+        expr: rate(edgelink_device_registration_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High device registration failure rate"
+          description: "Device registration is failing at {{ $value }} errors/sec"
+
+      # Rapid device churn
+      - alert: RapidDeviceChurn
+        expr: rate(edgelink_devices_disconnected_total[5m]) > 10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Rapid device disconnection rate"
+          description: "Devices are disconnecting at {{ $value }} devices/sec - possible network instability"
+
+  # Tunnel Health
+  - name: tunnel_health
+    interval: 1m
+    rules:
+      # High tunnel failure rate
+      - alert: HighTunnelFailureRate
+        expr: rate(edgelink_tunnel_establishment_failures_total[5m]) > 0.5
+        for: 5m
+        labels:
+          severity: high
+        annotations:
+          summary: "High tunnel establishment failure rate"
+          description: "Tunnels are failing at {{ $value }} failures/sec"
+
+      # High average tunnel latency
+      - alert: HighTunnelLatency
+        expr: avg(edgelink_tunnel_latency_milliseconds) > 500
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High average tunnel latency"
+          description: "Average tunnel latency is {{ $value }}ms"
+
+      # Tunnel packet loss
+      - alert: TunnelPacketLoss
+        expr: |
+          (
+            sum(rate(edgelink_tunnel_packets_dropped_total[5m]))
+            /
+            sum(rate(edgelink_tunnel_packets_total[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High tunnel packet loss"
+          description: "Tunnel packet loss is {{ $value | humanizePercentage }}"
+
+  # Resource Utilization
+  - name: resource_utilization
+    interval: 30s
+    rules:
+      # High CPU usage
+      - alert: HighCPUUsage
+        expr: |
+          100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value }}% on {{ $labels.instance }}"
+
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: |
+          (
+            (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes)
+            /
+            node_memory_MemTotal_bytes
+          ) * 100 > 85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value }}% on {{ $labels.instance }}"
+
+      # Disk space running low
+      - alert: DiskSpaceLow
+        expr: |
+          (
+            (node_filesystem_avail_bytes{mountpoint="/"}
+            /
+            node_filesystem_size_bytes{mountpoint="/"})
+          ) * 100 < 15
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk space running low"
+          description: "Only {{ $value }}% disk space available on {{ $labels.instance }}"
+
+      # Critical disk space
+      - alert: DiskSpaceCritical
+        expr: |
+          (
+            (node_filesystem_avail_bytes{mountpoint="/"}
+            /
+            node_filesystem_size_bytes{mountpoint="/"})
+          ) * 100 < 5
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk space critically low"
+          description: "Only {{ $value }}% disk space available on {{ $labels.instance }} - immediate action required"
+
+  # Database Health
+  - name: database_health
+    interval: 30s
+    rules:
+      # PostgreSQL down
+      - alert: PostgreSQLDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: postgres
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL database is unreachable"
+
+      # High database connection usage
+      - alert: HighDatabaseConnections
+        expr: |
+          (
+            sum(pg_stat_database_numbackends)
+            /
+            pg_settings_max_connections
+          ) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          component: postgres
+        annotations:
+          summary: "High database connection usage"
+          description: "Database connection pool is {{ $value | humanizePercentage }} utilized"
+
+      # Slow database queries
+      - alert: SlowDatabaseQueries
+        expr: rate(pg_stat_database_tup_fetched[5m]) / rate(pg_stat_database_tup_returned[5m]) < 0.1
+        for: 10m
+        labels:
+          severity: warning
+          component: postgres
+        annotations:
+          summary: "Slow database queries detected"
+          description: "Database query efficiency has degraded"
+
+  # Redis Health
+  - name: redis_health
+    interval: 30s
+    rules:
+      # Redis down
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: redis
+        annotations:
+          summary: "Redis is down"
+          description: "Redis cache is unreachable"
+
+      # High Redis memory usage
+      - alert: RedisHighMemoryUsage
+        expr: |
+          (
+            redis_memory_used_bytes
+            /
+            redis_memory_max_bytes
+          ) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: redis
+        annotations:
+          summary: "Redis memory usage high"
+          description: "Redis memory is {{ $value | humanizePercentage }} utilized"
+
+      # Redis connection spike
+      - alert: RedisConnectionSpike
+        expr: rate(redis_connected_clients[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+          component: redis
+        annotations:
+          summary: "Redis connection spike"
+          description: "Redis connections increasing at {{ $value }} conn/sec"
+
+  # Alert Service Health
+  - name: alerting_health
+    interval: 1m
+    rules:
+      # Alert delivery failures
+      - alert: AlertDeliveryFailures
+        expr: rate(edgelink_alert_delivery_failures_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: high
+          component: alert-service
+        annotations:
+          summary: "Alert delivery failures"
+          description: "Alerts are failing to deliver at {{ $value }} failures/sec"
+
+      # Alert backlog growing
+      - alert: AlertBacklogGrowing
+        expr: edgelink_alert_queue_size > 1000
+        for: 10m
+        labels:
+          severity: warning
+          component: alert-service
+        annotations:
+          summary: "Alert queue backlog growing"
+          description: "Alert queue has {{ $value }} pending alerts"
+
+  # Security Alerts
+  - name: security
+    interval: 1m
+    rules:
+      # High authentication failure rate
+      - alert: HighAuthFailureRate
+        expr: rate(edgelink_auth_failures_total[5m]) > 5
+        for: 5m
+        labels:
+          severity: high
+          component: security
+        annotations:
+          summary: "High authentication failure rate"
+          description: "Authentication failures at {{ $value }} failures/sec - possible attack"
+
+      # Key expiration warnings not sent
+      - alert: KeyExpirationWarningsFailing
+        expr: rate(edgelink_key_expiry_check_errors_total[1h]) > 0
+        for: 1h
+        labels:
+          severity: warning
+          component: background-worker
+        annotations:
+          summary: "Key expiration checks failing"
+          description: "Unable to send key expiration warnings"

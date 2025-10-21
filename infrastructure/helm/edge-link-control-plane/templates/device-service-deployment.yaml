@@ -1,0 +1,57 @@
+{{- if .Values.deviceService.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "edge-link-control-plane.fullname" . }}-device-service
+  labels:
+    {{- include "edge-link-control-plane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: device-service
+spec:
+  replicas: {{ .Values.deviceService.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "edge-link-control-plane.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: device-service
+  template:
+    metadata:
+      labels:
+        {{- include "edge-link-control-plane.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: device-service
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: device-service
+          image: "{{ .Values.global.imageRegistry }}{{ .Values.deviceService.image.repository }}:{{ .Values.deviceService.image.tag }}"
+          imagePullPolicy: {{ .Values.deviceService.image.pullPolicy }}
+          ports:
+            - name: grpc
+              containerPort: {{ .Values.deviceService.service.port }}
+              protocol: TCP
+          env:
+            - name: DATABASE_HOST
+              value: {{ include "edge-link-control-plane.fullname" . }}-postgresql
+            - name: DATABASE_PORT
+              value: "5432"
+            - name: DATABASE_NAME
+              value: {{ .Values.postgresql.auth.database }}
+            - name: DATABASE_USER
+              value: {{ .Values.postgresql.auth.username }}
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "edge-link-control-plane.fullname" . }}-postgresql
+                  key: password
+            {{- range $key, $value := .Values.deviceService.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.deviceService.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+{{- end }}

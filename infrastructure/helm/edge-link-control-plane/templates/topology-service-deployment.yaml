@@ -1,0 +1,57 @@
+{{- if .Values.topologyService.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "edge-link-control-plane.fullname" . }}-topology-service
+  labels:
+    {{- include "edge-link-control-plane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: topology-service
+spec:
+  replicas: {{ .Values.topologyService.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "edge-link-control-plane.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: topology-service
+  template:
+    metadata:
+      labels:
+        {{- include "edge-link-control-plane.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: topology-service
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: topology-service
+          image: "{{ .Values.global.imageRegistry }}{{ .Values.topologyService.image.repository }}:{{ .Values.topologyService.image.tag }}"
+          imagePullPolicy: {{ .Values.topologyService.image.pullPolicy }}
+          ports:
+            - name: grpc
+              containerPort: {{ .Values.topologyService.service.port }}
+              protocol: TCP
+          env:
+            - name: DATABASE_HOST
+              value: {{ include "edge-link-control-plane.fullname" . }}-postgresql
+            - name: DATABASE_PORT
+              value: "5432"
+            - name: DATABASE_NAME
+              value: {{ .Values.postgresql.auth.database }}
+            - name: DATABASE_USER
+              value: {{ .Values.postgresql.auth.username }}
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "edge-link-control-plane.fullname" . }}-postgresql
+                  key: password
+            {{- range $key, $value := .Values.topologyService.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.topologyService.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+{{- end }}

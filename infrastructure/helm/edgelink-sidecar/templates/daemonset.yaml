@@ -1,0 +1,125 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.namespace }}
+  labels:
+    {{- include "edgelink-sidecar.labels" . | nindent 4 }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "edgelink-sidecar.fullname" . }}-psk
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "edgelink-sidecar.labels" . | nindent 4 }}
+type: Opaque
+data:
+  psk: {{ .Values.edgelink.preSharedKey | b64enc | quote }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "edgelink-sidecar.fullname" . }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "edgelink-sidecar.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "edgelink-sidecar.selectorLabels" . | nindent 6 }}
+  updateStrategy:
+    type: {{ .Values.updateStrategy.type }}
+    {{- if eq .Values.updateStrategy.type "RollingUpdate" }}
+    rollingUpdate:
+      maxUnavailable: {{ .Values.updateStrategy.rollingUpdate.maxUnavailable }}
+    {{- end }}
+  template:
+    metadata:
+      annotations:
+        checksum/secret: {{ include (print $.Template.BasePath "/daemonset.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "edgelink-sidecar.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      hostNetwork: {{ .Values.hostNetwork }}
+      dnsPolicy: {{ .Values.dnsPolicy }}
+      serviceAccountName: {{ include "edgelink-sidecar.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+      {{- if .Values.sysctl.enabled }}
+      - name: sysctl
+        image: busybox:1.36
+        command:
+        - sh
+        - -c
+        - |
+          sysctl -w net.ipv4.ip_forward=1
+          sysctl -w net.ipv4.conf.all.forwarding=1
+        securityContext:
+          privileged: true
+      {{- end }}
+      containers:
+      - name: edgelink-sidecar
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: EDGELINK_SERVER
+          value: {{ .Values.edgelink.serverUrl | quote }}
+        - name: EDGELINK_PSK
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "edgelink-sidecar.fullname" . }}-psk
+              key: psk
+        - name: EDGELINK_DEVICE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: EDGELINK_LOG_LEVEL
+          value: {{ .Values.edgelink.logLevel | quote }}
+        {{- with .Values.env }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+        volumeMounts:
+        - name: config
+          mountPath: /etc/edgelink
+        - name: wireguard
+          mountPath: /dev/net/tun
+        {{- with .Values.volumeMounts }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      volumes:
+      - name: config
+        emptyDir: {}
+      - name: wireguard
+        hostPath:
+          path: /dev/net/tun
+          type: CharDevice
+      {{- with .Values.volumes }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}

@@ -1,0 +1,100 @@
+# ============================================
+# Stage 1: Build Stage
+# Purpose: Compile Go binary with build dependencies
+# ============================================
+ARG GO_VERSION=1.21
+ARG ALPINE_VERSION=3.18
+ARG GO_ALPINE_DIGEST=sha256:2414035b086e3c42b99654c8b26e6f5b1b1598080d65fd03c7f499552ff4dc94
+ARG ALPINE_DIGEST=sha256:de0eb0b3f2a47ba1eb89389859a9bd88b28e82f5826b6969ad604979713c2d4f
+
+FROM golang:${GO_VERSION}-alpine@${GO_ALPINE_DIGEST} AS builder
+
+# Declare build-time metadata
+ARG BUILD_DATE
+ARG VERSION
+ARG COMMIT_SHA
+
+# Install build dependencies
+# - git: for go mod download
+# - make: for build scripts
+# - gcc/musl-dev: for CGO compilation if needed
+# - protobuf-dev: for gRPC code generation
+RUN apk add --no-cache \
+    git=2.40.1-r0 \
+    make=4.4.1-r1 \
+    gcc=12.2.1_git20220924-r10 \
+    musl-dev=1.2.4-r2 \
+    protobuf-dev=3.21.12-r2
+
+# Set working directory
+WORKDIR /build
+
+# Layer 1: Download dependencies (cached unless go.mod/go.sum changes)
+COPY backend/go.mod ./
+COPY backend/go.sum* ./
+RUN go mod download && go mod verify
+
+# Layer 2: Copy source code (invalidates cache on code changes)
+COPY backend/ ./
+
+# Layer 3: Build the binary with reproducible build flags
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -trimpath \
+    -buildvcs=false \
+    -ldflags="-w -s -buildid= -X main.Version=${VERSION} -X main.CommitSHA=${COMMIT_SHA} -X main.BuildDate=${BUILD_DATE}" \
+    -o /app/topology-service \
+    ./cmd/topology-service
+
+# ============================================
+# Stage 2: Final Runtime Stage
+# Purpose: Minimal production image with security hardening
+# ============================================
+FROM alpine:${ALPINE_VERSION}@${ALPINE_DIGEST}
+
+# Declare build-time metadata (must re-declare in multi-stage build)
+ARG BUILD_DATE
+ARG VERSION
+ARG COMMIT_SHA
+
+# Install runtime dependencies
+# - ca-certificates: for HTTPS connections
+# - tzdata: for timezone support
+RUN apk add --no-cache \
+    ca-certificates=20230506-r0 \
+    tzdata=2024a-r0 && \
+    rm -rf /var/cache/apk/*
+
+# Create non-root user for security
+RUN addgroup -g 1000 edgelink && \
+    adduser -D -u 1000 -G edgelink edgelink
+
+# Set working directory
+WORKDIR /app
+
+# Copy binary from builder stage
+COPY --from=builder /app/topology-service /app/topology-service
+
+# Change ownership to non-root user
+RUN chown -R edgelink:edgelink /app
+
+# Add OCI metadata labels
+LABEL org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${COMMIT_SHA}" \
+      org.opencontainers.image.title="EdgeLink Topology Service" \
+      org.opencontainers.image.description="EdgeLink Network Topology Management gRPC Service" \
+      org.opencontainers.image.vendor="EdgeLink" \
+      org.opencontainers.image.authors="EdgeLink Development Team"
+
+# Switch to non-root user
+USER edgelink
+
+# Expose gRPC port
+EXPOSE 50052
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD nc -z localhost 50052 || exit 1
+
+# Run the binary
+ENTRYPOINT ["/app/topology-service"]

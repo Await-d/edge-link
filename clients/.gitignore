@@ -1,0 +1,71 @@
+# Go binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+dist/
+
+# Go test files
+*.test
+*.out
+
+# macOS
+.DS_Store
+*.app/
+
+# Windows
+*.msi
+*.zip
+
+# Linux
+*.deb
+*.rpm
+*.tar.gz
+
+# Build artifacts
+build/
+*.o
+*.a
+
+# iOS
+xcuserdata/
+*.xcworkspace/
+Pods/
+DerivedData/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Android
+*.apk
+*.aab
+.gradle/
+local.properties
+.idea/
+*.iml
+.externalNativeBuild/
+.cxx/
+captures/
+.navigation/
+output.json
+
+# Dependencies
+node_modules/
+vendor/
+
+# IDE
+.vscode/
+.idea/
+
+# Environment
+.env
+.env.local
+
+# Logs
+*.log
+
+# WireGuard configurations (sensitive)
+*.conf
+!example.conf

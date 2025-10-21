@@ -1,0 +1,189 @@
+{{- if .Values.monitoring.autoRollback.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "edge-link-control-plane.fullname" . }}-rollback-script
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "edge-link-control-plane.labels" . | nindent 4 }}
+data:
+  auto-rollback.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    # Configuration from environment
+    NAMESPACE="${NAMESPACE:-{{ .Release.Namespace }}}"
+    DEPLOYMENT_PREFIX="${DEPLOYMENT_PREFIX:-edgelink}"
+    MAX_ROLLBACK_RETRIES="${MAX_ROLLBACK_RETRIES:-{{ .Values.monitoring.autoRollback.maxRetries }}}"
+    ROLLBACK_TIMEOUT="${ROLLBACK_TIMEOUT:-{{ .Values.monitoring.autoRollback.timeout }}}"
+    DRY_RUN="${DRY_RUN:-{{ .Values.monitoring.autoRollback.dryRun }}}"
+    WEBHOOK_URL="${WEBHOOK_URL:-{{ .Values.monitoring.autoRollback.webhookUrl }}}"
+
+    # Colors for output
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    NC='\033[0m' # No Color
+
+    log_info() {
+        echo -e "${GREEN}[INFO]${NC} $(date '+%Y-%m-%d %H:%M:%S') - $*"
+    }
+
+    log_warn() {
+        echo -e "${YELLOW}[WARN]${NC} $(date '+%Y-%m-%d %H:%M:%S') - $*"
+    }
+
+    log_error() {
+        echo -e "${RED}[ERROR]${NC} $(date '+%Y-%m-%d %H:%M:%S') - $*"
+    }
+
+    # Send notification via webhook
+    send_notification() {
+        local title="$1"
+        local message="$2"
+        local severity="${3:-info}"
+        
+        if [[ -n "$WEBHOOK_URL" ]]; then
+            curl -s -X POST "$WEBHOOK_URL" \
+                -H "Content-Type: application/json" \
+                -d "{\"title\":\"$title\",\"message\":\"$message\",\"severity\":\"$severity\",\"namespace\":\"$NAMESPACE\"}" \
+                || log_warn "Failed to send webhook notification"
+        fi
+    }
+
+    # Check if deployment has previous revision
+    has_previous_revision() {
+        local deployment="$1"
+        local revision_count
+        revision_count=$(kubectl rollout history deployment/"$deployment" -n "$NAMESPACE" 2>/dev/null | grep -c "^[0-9]" || echo 0)
+        [[ $revision_count -gt 1 ]]
+    }
+
+    # Get deployment health metrics
+    get_deployment_health() {
+        local deployment="$1"
+        local desired replicas ready unavailable status_conditions
+
+        desired=$(kubectl get deployment "$deployment" -n "$NAMESPACE" -o jsonpath='{.spec.replicas}' 2>/dev/null || echo 0)
+        ready=$(kubectl get deployment "$deployment" -n "$NAMESPACE" -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo 0)
+        unavailable=$(kubectl get deployment "$deployment" -n "$NAMESPACE" -o jsonpath='{.status.unavailableReplicas}' 2>/dev/null || echo 0)
+        
+        echo "desired=$desired ready=$ready unavailable=$unavailable"
+    }
+
+    # Perform rollback for a single deployment
+    rollback_deployment() {
+        local deployment="$1"
+        local reason="${2:-Manual rollback}"
+        
+        log_info "Starting rollback for deployment: $deployment"
+        log_info "Reason: $reason"
+
+        # Check if previous revision exists
+        if ! has_previous_revision "$deployment"; then
+            log_error "No previous revision found for $deployment, cannot rollback"
+            send_notification "Rollback Failed" "No previous revision for $deployment" "error"
+            return 1
+        fi
+
+        # Get current health status
+        local health
+        health=$(get_deployment_health "$deployment")
+        log_info "Current deployment health: $health"
+
+        # Dry run mode
+        if [[ "$DRY_RUN" == "true" ]]; then
+            log_warn "DRY RUN MODE: Would rollback deployment $deployment"
+            send_notification "Rollback Dry Run" "Would rollback $deployment: $reason" "warning"
+            return 0
+        fi
+
+        # Create event
+        kubectl create event \
+            --namespace="$NAMESPACE" \
+            --type=Warning \
+            --reason=AutoRollback \
+            --message="Auto-rollback triggered: $reason" \
+            --reporting-controller=edgelink-rollback \
+            --reporting-instance=$(hostname) \
+            --action=Rollback \
+            --field-path="spec.template.spec.containers{$deployment}" \
+            || log_warn "Failed to create event"
+
+        # Execute rollback
+        log_info "Executing rollback..."
+        if kubectl rollout undo deployment/"$deployment" -n "$NAMESPACE"; then
+            log_info "Rollback command executed successfully"
+        else
+            log_error "Rollback command failed"
+            send_notification "Rollback Failed" "kubectl rollout undo failed for $deployment" "error"
+            return 1
+        fi
+
+        # Wait for rollback to complete
+        log_info "Waiting for rollback to complete (timeout: ${ROLLBACK_TIMEOUT}s)..."
+        if kubectl rollout status deployment/"$deployment" -n "$NAMESPACE" --timeout="${ROLLBACK_TIMEOUT}s"; then
+            log_info "Rollback completed successfully for $deployment"
+            
+            # Get new health status
+            local new_health
+            new_health=$(get_deployment_health "$deployment")
+            log_info "New deployment health: $new_health"
+            
+            send_notification "Rollback Successful" "$deployment rolled back successfully: $reason" "success"
+            return 0
+        else
+            log_error "Rollback timed out or failed for $deployment"
+            send_notification "Rollback Timeout" "Rollback timed out for $deployment" "error"
+            return 1
+        fi
+    }
+
+    # Main rollback orchestration
+    main() {
+        log_info "EdgeLink Auto-Rollback Script Starting"
+        log_info "Namespace: $NAMESPACE"
+        log_info "Deployment Prefix: $DEPLOYMENT_PREFIX"
+        log_info "Dry Run: $DRY_RUN"
+
+        # Get target deployment from argument or environment
+        local target_deployment="${1:-$TARGET_DEPLOYMENT}"
+        local rollback_reason="${2:-$ROLLBACK_REASON}"
+
+        if [[ -z "$target_deployment" ]]; then
+            log_error "No target deployment specified"
+            exit 1
+        fi
+
+        # Validate deployment exists
+        if ! kubectl get deployment "$target_deployment" -n "$NAMESPACE" &>/dev/null; then
+            log_error "Deployment $target_deployment not found in namespace $NAMESPACE"
+            exit 1
+        fi
+
+        # Execute rollback with retries
+        local retry_count=0
+        while [[ $retry_count -lt $MAX_ROLLBACK_RETRIES ]]; do
+            if [[ $retry_count -gt 0 ]]; then
+                log_warn "Retry attempt $retry_count of $MAX_ROLLBACK_RETRIES"
+                sleep 10
+            fi
+
+            if rollback_deployment "$target_deployment" "$rollback_reason"; then
+                log_info "Rollback operation completed successfully"
+                exit 0
+            else
+                ((retry_count++))
+            fi
+        done
+
+        log_error "Rollback failed after $MAX_ROLLBACK_RETRIES attempts"
+        send_notification "Rollback Failed" "All retry attempts exhausted for $target_deployment" "critical"
+        exit 1
+    }
+
+    # Run main function
+    main "$@"
+
+{{- end }}

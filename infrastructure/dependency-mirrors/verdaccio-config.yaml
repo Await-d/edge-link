@@ -1,0 +1,90 @@
+# Verdaccio npm Private Registry Configuration
+# https://verdaccio.org/docs/configuration
+
+# 存储路径
+storage: /verdaccio/storage
+
+# 认证配置
+auth:
+  htpasswd:
+    file: /verdaccio/htpasswd
+    # 最大用户数，-1表示禁用注册
+    max_users: 100
+    # 密码加密算法
+    algorithm: bcrypt
+
+# Web UI配置
+web:
+  title: EdgeLink npm Registry
+  gravatar: true
+  scope: '@edgelink'
+  darkMode: true
+
+# Uplinks配置（上游registry）
+uplinks:
+  npmjs:
+    url: https://registry.npmjs.org/
+    timeout: 30s
+    maxage: 30m
+    max_fails: 3
+    fail_timeout: 5m
+  
+  npmmirror:
+    url: https://registry.npmmirror.com/
+    timeout: 30s
+    maxage: 30m
+    max_fails: 3
+    fail_timeout: 5m
+
+# 包访问控制
+packages:
+  # EdgeLink私有包
+  '@edgelink/*':
+    access: $authenticated
+    publish: $authenticated
+    unpublish: $authenticated
+    proxy: npmjs
+  
+  # 其他scoped包
+  '@*/*':
+    access: $all
+    publish: $authenticated
+    unpublish: $authenticated
+    proxy: npmmirror npmjs
+  
+  # 普通包
+  '**':
+    access: $all
+    publish: $authenticated
+    unpublish: $authenticated
+    # 优先使用中国镜像，失败后fallback到npmjs
+    proxy: npmmirror npmjs
+
+# 服务器配置
+listen:
+  - 0.0.0.0:4873
+
+# 日志配置
+logs:
+  - { type: stdout, format: pretty, level: info }
+  - { type: file, path: /verdaccio/logs/verdaccio.log, level: info }
+
+# 中间件
+middlewares:
+  audit:
+    enabled: true
+
+# 实验性特性
+experiments:
+  # Token-based authentication
+  token: true
+  # 搜索功能
+  search: true
+
+# 最大上传大小
+max_body_size: 100mb
+
+# 用户速率限制
+userRateLimit:
+  windowMs: 15000
+  max: 100

@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package edgelink.device.v1;
+
+option go_package = "github.com/edgelink/backend/pkg/api/devicepb";
+
+import "google/protobuf/timestamp.proto";
+
+// DeviceService 设备管理gRPC服务
+service DeviceService {
+  // RegisterDevice 注册新设备
+  rpc RegisterDevice(RegisterDeviceRequest) returns (RegisterDeviceResponse);
+
+  // GetDeviceConfig 获取设备配置
+  rpc GetDeviceConfig(GetDeviceConfigRequest) returns (GetDeviceConfigResponse);
+
+  // UpdateDeviceStatus 更新设备在线状态
+  rpc UpdateDeviceStatus(UpdateDeviceStatusRequest) returns (UpdateDeviceStatusResponse);
+
+  // RevokeDevice 撤销设备
+  rpc RevokeDevice(RevokeDeviceRequest) returns (RevokeDeviceResponse);
+}
+
+// RegisterDeviceRequest 设备注册请求
+message RegisterDeviceRequest {
+  string public_key = 1;
+  string platform = 2;
+  string device_name = 3;
+  string organization_slug = 4;
+  string virtual_network_id = 5;
+  string pre_shared_key = 6;
+}
+
+// RegisterDeviceResponse 设备注册响应
+message RegisterDeviceResponse {
+  string device_id = 1;
+  string virtual_ip = 2;
+  string virtual_network_id = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+// GetDeviceConfigRequest 获取设备配置请求
+message GetDeviceConfigRequest {
+  string device_id = 1;
+}
+
+// GetDeviceConfigResponse 获取设备配置响应
+message GetDeviceConfigResponse {
+  string device_id = 1;
+  string virtual_ip = 2;
+  string virtual_network_id = 3;
+  string platform = 4;
+  bool online = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+// UpdateDeviceStatusRequest 更新设备状态请求
+message UpdateDeviceStatusRequest {
+  string device_id = 1;
+  bool online = 2;
+}
+
+// UpdateDeviceStatusResponse 更新设备状态响应
+message UpdateDeviceStatusResponse {
+  bool success = 1;
+}
+
+// RevokeDeviceRequest 撤销设备请求
+message RevokeDeviceRequest {
+  string device_id = 1;
+}
+
+// RevokeDeviceResponse 撤销设备响应
+message RevokeDeviceResponse {
+  bool success = 1;
+}

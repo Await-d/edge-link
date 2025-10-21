@@ -1,0 +1,501 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.2.3)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  GO_VERSION: '1.21'
+  NODE_VERSION: '20'
+  DOCKER_REGISTRY: ghcr.io
+  IMAGE_PREFIX: edgelink
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+jobs:
+  # Validate release prerequisites
+  validate:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+      is_prerelease: ${{ steps.check_prerelease.outputs.is_prerelease }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version from tag or input
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=${GITHUB_REF#refs/tags/}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Check if pre-release
+        id: check_prerelease
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          if [[ "$VERSION" =~ -alpha|-beta|-rc ]] || [ "${{ github.event.inputs.prerelease }}" == "true" ]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Validate semantic version
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "::error::Invalid semantic version: $VERSION"
+            exit 1
+          fi
+
+      - name: Check for CHANGELOG entry
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          if ! grep -q "$VERSION" CHANGELOG.md; then
+            echo "::warning::No CHANGELOG entry found for $VERSION"
+          fi
+
+  # Run all tests before release
+  test-backend:
+    name: Test Backend
+    uses: ./.github/workflows/backend.yml
+    needs: validate
+
+  test-frontend:
+    name: Test Frontend
+    uses: ./.github/workflows/frontend.yml
+    needs: validate
+
+  # Run security scans
+  security-scan:
+    name: Security Scan
+    uses: ./.github/workflows/security-scan.yml
+    needs: validate
+    secrets: inherit
+
+  # Build release artifacts
+  build-artifacts:
+    name: Build Release Artifacts
+    runs-on: ubuntu-latest
+    needs: [validate, test-backend, test-frontend, security-scan]
+    strategy:
+      matrix:
+        service:
+          - api-gateway
+          - alert-service
+          - background-worker
+          - frontend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ needs.validate.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.validate.outputs.version }}
+            type=semver,pattern={{major}},value=${{ needs.validate.outputs.version }}
+            type=raw,value=latest,enable=${{ needs.validate.outputs.is_prerelease == 'false' }}
+          labels: |
+            org.opencontainers.image.title=${{ matrix.service }}
+            org.opencontainers.image.description=Edge-Link ${{ matrix.service }} service
+            org.opencontainers.image.version=${{ needs.validate.outputs.version }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: infrastructure/docker/Dockerfile.${{ matrix.service }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
+      - name: Generate image digest
+        run: |
+          echo "Image digest: ${{ steps.build.outputs.digest }}"
+          echo "${{ steps.build.outputs.digest }}" > ${{ matrix.service }}-digest.txt
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.service }}
+          path: ${{ matrix.service }}-digest.txt
+          retention-days: 90
+
+  # Build desktop client binaries
+  build-desktop-client:
+    name: Build Desktop Client
+    runs-on: ${{ matrix.os }}
+    needs: [validate, test-backend]
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-amd64
+            goos: linux
+            goarch: amd64
+          - os: ubuntu-latest
+            target: linux-arm64
+            goos: linux
+            goarch: arm64
+          - os: windows-latest
+            target: windows-amd64
+            goos: windows
+            goarch: amd64
+          - os: macos-latest
+            target: darwin-amd64
+            goos: darwin
+            goarch: amd64
+          - os: macos-latest
+            target: darwin-arm64
+            goos: darwin
+            goarch: arm64
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build desktop client
+        run: |
+          cd clients/desktop
+          VERSION="${{ needs.validate.outputs.version }}"
+          go build -ldflags="-s -w -X main.Version=$VERSION" -o edgelink-${{ matrix.target }} ./cmd/edgelink
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+
+      - name: Generate checksum
+        run: |
+          cd clients/desktop
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            certutil -hashfile edgelink-${{ matrix.target }} SHA256 > edgelink-${{ matrix.target }}.sha256
+          else
+            shasum -a 256 edgelink-${{ matrix.target }} > edgelink-${{ matrix.target }}.sha256
+          fi
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-client-${{ matrix.target }}
+          path: |
+            clients/desktop/edgelink-${{ matrix.target }}
+            clients/desktop/edgelink-${{ matrix.target }}.sha256
+          retention-days: 90
+
+  # Build Helm charts
+  build-helm-charts:
+    name: Build Helm Charts
+    runs-on: ubuntu-latest
+    needs: [validate, build-artifacts]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'v3.13.0'
+
+      - name: Update chart versions
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          APP_VERSION="${VERSION#v}"
+
+          # Update control plane chart
+          sed -i "s/^version:.*/version: $APP_VERSION/" infrastructure/helm/edge-link-control-plane/Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: $APP_VERSION/" infrastructure/helm/edge-link-control-plane/Chart.yaml
+
+          # Update sidecar chart
+          sed -i "s/^version:.*/version: $APP_VERSION/" infrastructure/helm/edgelink-sidecar/Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: $APP_VERSION/" infrastructure/helm/edgelink-sidecar/Chart.yaml
+
+      - name: Package Helm charts
+        run: |
+          helm package infrastructure/helm/edge-link-control-plane -d release/
+          helm package infrastructure/helm/edgelink-sidecar -d release/
+
+      - name: Generate Helm chart checksums
+        run: |
+          cd release
+          shasum -a 256 *.tgz > checksums.txt
+
+      - name: Upload Helm charts
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-charts
+          path: release/
+          retention-days: 90
+
+  # Generate release notes
+  generate-release-notes:
+    name: Generate Release Notes
+    runs-on: ubuntu-latest
+    needs: validate
+    outputs:
+      release_notes: ${{ steps.notes.outputs.notes }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate release notes
+        id: notes
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { execSync } = require('child_process');
+            const version = '${{ needs.validate.outputs.version }}';
+
+            // Get previous tag
+            let previousTag;
+            try {
+              previousTag = execSync('git describe --tags --abbrev=0 HEAD^').toString().trim();
+            } catch (e) {
+              previousTag = execSync('git rev-list --max-parents=0 HEAD').toString().trim();
+            }
+
+            // Get commits since previous tag
+            const commits = execSync(`git log ${previousTag}..HEAD --pretty=format:"%h %s"`).toString().trim();
+
+            // Parse commits by type
+            const features = [];
+            const fixes = [];
+            const others = [];
+
+            commits.split('\n').forEach(commit => {
+              if (commit.match(/^[a-f0-9]+ feat/i)) {
+                features.push(commit.replace(/^[a-f0-9]+ feat:\s*/i, ''));
+              } else if (commit.match(/^[a-f0-9]+ fix/i)) {
+                fixes.push(commit.replace(/^[a-f0-9]+ fix:\s*/i, ''));
+              } else {
+                others.push(commit.replace(/^[a-f0-9]+ /, ''));
+              }
+            });
+
+            // Build release notes
+            let notes = `## Release ${version}\n\n`;
+
+            if (features.length > 0) {
+              notes += '### ✨ Features\n';
+              features.forEach(f => notes += `- ${f}\n`);
+              notes += '\n';
+            }
+
+            if (fixes.length > 0) {
+              notes += '### 🐛 Bug Fixes\n';
+              fixes.forEach(f => notes += `- ${f}\n`);
+              notes += '\n';
+            }
+
+            if (others.length > 0) {
+              notes += '### 🔧 Other Changes\n';
+              others.forEach(o => notes += `- ${o}\n`);
+              notes += '\n';
+            }
+
+            notes += `\n**Full Changelog**: https://github.com/${context.repo.owner}/${context.repo.repo}/compare/${previousTag}...${version}\n`;
+
+            core.setOutput('notes', notes);
+            return notes;
+
+      - name: Save release notes
+        run: |
+          echo '${{ steps.notes.outputs.notes }}' > release-notes.md
+
+      - name: Upload release notes
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: release-notes.md
+          retention-days: 90
+
+  # Create GitHub release
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs:
+      - validate
+      - build-artifacts
+      - build-desktop-client
+      - build-helm-charts
+      - generate-release-notes
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Create release bundle
+        run: |
+          mkdir -p release-bundle
+
+          # Copy desktop clients
+          cp artifacts/desktop-client-*/* release-bundle/
+
+          # Copy Helm charts
+          cp artifacts/helm-charts/* release-bundle/
+
+          # Copy image digests
+          cat artifacts/digest-*/\* > release-bundle/image-digests.txt
+
+          # Generate combined checksum
+          cd release-bundle
+          shasum -a 256 edgelink-* *.tgz > SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.validate.outputs.version }}
+          name: Release ${{ needs.validate.outputs.version }}
+          body_path: artifacts/release-notes/release-notes.md
+          prerelease: ${{ needs.validate.outputs.is_prerelease == 'true' }}
+          files: |
+            release-bundle/*
+          generate_release_notes: false
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Deploy to production (manual approval required)
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [validate, create-release]
+    if: needs.validate.outputs.is_prerelease == 'false'
+    environment:
+      name: production
+      url: https://api.edgelink.example.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG_PROD }}" | base64 -d > $HOME/.kube/config
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'v3.13.0'
+
+      - name: Deploy with Helm
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          APP_VERSION="${VERSION#v}"
+
+          helm upgrade --install edge-link-prod \
+            infrastructure/helm/edge-link-control-plane \
+            --namespace edgelink-prod \
+            --create-namespace \
+            --set global.imageTag=$VERSION \
+            --set global.imageRegistry=${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }} \
+            --values infrastructure/helm/values-production.yaml \
+            --wait \
+            --timeout 15m \
+            --atomic
+
+      - name: Run smoke tests
+        run: |
+          ./scripts/smoke-test.sh api.edgelink.example.com
+
+      - name: Verify deployment health
+        run: |
+          # Wait for rollout to complete
+          kubectl rollout status deployment -n edgelink-prod -l app.kubernetes.io/instance=edge-link-prod
+
+          # Check pod health
+          kubectl get pods -n edgelink-prod
+
+          # Verify metrics endpoint
+          kubectl run curl-test --image=curlimages/curl:latest --rm -i --restart=Never -- \
+            curl -f http://edge-link-prod-api-gateway:8080/metrics
+
+  # Notify release completion
+  notify-release:
+    name: Notify Release
+    runs-on: ubuntu-latest
+    needs: [validate, create-release, deploy-production]
+    if: always()
+    steps:
+      - name: Send Slack notification
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: |
+            Release ${{ needs.validate.outputs.version }} completed!
+            Status: ${{ job.status }}
+            Deployment: ${{ needs.deploy-production.result }}
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update release metrics
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Track release metrics
+            console.log('Release metrics:', {
+              version: '${{ needs.validate.outputs.version }}',
+              timestamp: new Date().toISOString(),
+              prerelease: '${{ needs.validate.outputs.is_prerelease }}',
+              deployed: '${{ needs.deploy-production.result }}'
+            });

@@ -1,0 +1,113 @@
+# Default values for edgelink-sidecar
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Namespace for DaemonSet deployment
+namespace: edgelink-system
+
+# DaemonSet image configuration
+image:
+  repository: edgelink/edgelink-sidecar
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# EdgeLink configuration
+edgelink:
+  # EdgeLink control plane server URL
+  serverUrl: "https://api.edgelink.example.com"
+  
+  # Pre-shared key for device registration
+  # IMPORTANT: Change this in production
+  preSharedKey: "change-me-in-production"
+  
+  # Log level (debug, info, warn, error)
+  logLevel: "info"
+
+# Service account configuration
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Pod security context
+podSecurityContext:
+  # Required for WireGuard kernel module access
+  # In production, consider using more restrictive settings with WireGuard userspace
+  capabilities:
+    add:
+    - NET_ADMIN
+    - NET_RAW
+    - SYS_MODULE
+
+# Container security context
+securityContext:
+  privileged: true
+  # Note: privileged mode is required for kernel WireGuard
+  # For userspace WireGuard, use:
+  # privileged: false
+  # capabilities:
+  #   add:
+  #   - NET_ADMIN
+
+# Update strategy
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+
+# Resource limits and requests
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Use host network namespace
+# Required for WireGuard to create network interfaces
+hostNetwork: true
+
+# DNS policy (use ClusterFirstWithHostNet when hostNetwork is true)
+dnsPolicy: ClusterFirstWithHostNet
+
+# Node selector for scheduling
+nodeSelector: {}
+  # Example: only run on nodes with specific label
+  # edgelink.io/sidecar: "enabled"
+
+# Tolerations for scheduling
+tolerations:
+  # Allow scheduling on all nodes including control plane
+  - effect: NoSchedule
+    operator: Exists
+  - effect: NoExecute
+    operator: Exists
+
+# Affinity rules
+affinity: {}
+
+# Priority class name
+priorityClassName: ""
+
+# Pod annotations
+podAnnotations: {}
+
+# Additional environment variables
+env: []
+  # - name: CUSTOM_VAR
+  #   value: "custom-value"
+
+# Additional volume mounts
+volumeMounts: []
+
+# Additional volumes
+volumes: []
+
+# Sysctl init container
+sysctl:
+  enabled: true

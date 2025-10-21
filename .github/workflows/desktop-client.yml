@@ -1,0 +1,315 @@
+name: Desktop Client CI/CD
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'release/**'
+    paths:
+      - 'clients/desktop/**'
+      - '.github/workflows/desktop-client.yml'
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'clients/desktop/**'
+      - '.github/workflows/desktop-client.yml'
+  release:
+    types: [published]
+
+env:
+  GO_VERSION: '1.21'
+
+jobs:
+  # Linting
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('clients/desktop/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Install golangci-lint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.55.2
+
+      - name: Run golangci-lint
+        run: |
+          cd clients/desktop
+          golangci-lint run --timeout 5m
+
+  # Tests
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('clients/desktop/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Install dependencies
+        run: |
+          cd clients/desktop
+          go mod download
+
+      - name: Run tests
+        run: |
+          cd clients/desktop
+          go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./clients/desktop/coverage.out
+          flags: desktop-client
+          name: desktop-client-coverage
+
+  # Cross-platform builds
+  build:
+    name: Build ${{ matrix.os }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    needs: test
+    strategy:
+      matrix:
+        include:
+          # Linux builds
+          - os: linux
+            arch: amd64
+            runner: ubuntu-latest
+            output: edgelink-cli
+          - os: linux
+            arch: arm64
+            runner: ubuntu-latest
+            output: edgelink-cli
+
+          # Windows builds
+          - os: windows
+            arch: amd64
+            runner: windows-latest
+            output: edgelink-cli.exe
+
+          # macOS builds
+          - os: darwin
+            arch: amd64
+            runner: macos-latest
+            output: edgelink-cli
+          - os: darwin
+            arch: arm64
+            runner: macos-latest
+            output: edgelink-cli
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('clients/desktop/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      # Linux-specific: Install cross-compilation tools
+      - name: Install cross-compilation tools (Linux)
+        if: matrix.os == 'linux' && matrix.arch == 'arm64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      # Windows-specific: Install WiX Toolset
+      - name: Install WiX Toolset (Windows)
+        if: matrix.os == 'windows'
+        run: |
+          choco install wixtoolset
+
+      # macOS-specific: Install code signing tools
+      - name: Set up code signing (macOS)
+        if: matrix.os == 'darwin' && github.event_name == 'release'
+        run: |
+          echo "${{ secrets.MACOS_CERTIFICATE }}" | base64 -d > certificate.p12
+          security create-keychain -p actions build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p actions build.keychain
+          security import certificate.p12 -k build.keychain -P "${{ secrets.MACOS_CERTIFICATE_PWD }}" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions build.keychain
+
+      # Build edgelink-cli
+      - name: Build edgelink-cli
+        run: |
+          cd clients/desktop/cmd/edgelink-cli
+          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -ldflags="-s -w" -o ${{ matrix.output }}
+        env:
+          CGO_ENABLED: 0
+
+      # Build edgelink-daemon
+      - name: Build edgelink-daemon
+        run: |
+          cd clients/desktop/cmd/edgelink-daemon
+          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -ldflags="-s -w" -o edgelink-daemon${{ matrix.os == 'windows' && '.exe' || '' }}
+        env:
+          CGO_ENABLED: 0
+
+      # Build edgelink-lite
+      - name: Build edgelink-lite
+        run: |
+          cd clients/desktop/cmd/edgelink-lite
+          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -ldflags="-s -w" -o edgelink-lite${{ matrix.os == 'windows' && '.exe' || '' }}
+        env:
+          CGO_ENABLED: 0
+
+      # Package binaries
+      - name: Package binaries
+        run: |
+          mkdir -p dist
+          cp clients/desktop/cmd/edgelink-cli/${{ matrix.output }} dist/
+          cp clients/desktop/cmd/edgelink-daemon/edgelink-daemon${{ matrix.os == 'windows' && '.exe' || '' }} dist/
+          cp clients/desktop/cmd/edgelink-lite/edgelink-lite${{ matrix.os == 'windows' && '.exe' || '' }} dist/
+          cd dist
+          tar czf edgelink-${{ matrix.os }}-${{ matrix.arch }}.tar.gz *
+
+      # Code sign (macOS)
+      - name: Code sign binaries (macOS)
+        if: matrix.os == 'darwin' && github.event_name == 'release'
+        run: |
+          codesign --force --options runtime --sign "${{ secrets.MACOS_SIGNING_IDENTITY }}" dist/edgelink-cli
+          codesign --force --options runtime --sign "${{ secrets.MACOS_SIGNING_IDENTITY }}" dist/edgelink-daemon
+          codesign --force --options runtime --sign "${{ secrets.MACOS_SIGNING_IDENTITY }}" dist/edgelink-lite
+
+      # Create macOS .app bundle
+      - name: Create macOS app bundle
+        if: matrix.os == 'darwin'
+        run: |
+          cd clients/desktop/build/macos
+          chmod +x build-app.sh
+          ./build-app.sh
+
+      # Create Windows installer
+      - name: Create Windows installer
+        if: matrix.os == 'windows'
+        run: |
+          cd clients/desktop/build/windows
+          powershell -ExecutionPolicy Bypass -File build-installer.ps1
+
+      # Upload artifacts
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: edgelink-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/edgelink-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
+          retention-days: 7
+
+      - name: Upload macOS app (if built)
+        if: matrix.os == 'darwin'
+        uses: actions/upload-artifact@v4
+        with:
+          name: edgelink-macos-${{ matrix.arch }}-app
+          path: clients/desktop/build/macos/EdgeLink.app
+          retention-days: 7
+
+      - name: Upload Windows installer (if built)
+        if: matrix.os == 'windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: edgelink-windows-${{ matrix.arch }}-installer
+          path: clients/desktop/build/windows/EdgeLinkSetup.msi
+          retention-days: 7
+
+  # Create GitHub release
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'release'
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/**/*.tar.gz
+            artifacts/**/*.app
+            artifacts/**/*.msi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Security scanning
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: './clients/desktop'
+          format: 'sarif'
+          output: 'trivy-desktop-results.sarif'
+
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-desktop-results.sarif'
+
+  # Notify on failure
+  notify:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    needs: [lint, test, build]
+    if: failure()
+    steps:
+      - name: Send Slack notification
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: 'Desktop Client CI/CD pipeline failed'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

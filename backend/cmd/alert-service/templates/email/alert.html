@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EdgeLink Alert</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .email-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .header {
+            background-color: {{.SeverityColor}};
+            color: white;
+            padding: 30px 20px;
+        }
+        .header h1 {
+            margin: 0 0 10px 0;
+            font-size: 26px;
+            font-weight: 600;
+        }
+        .severity-badge {
+            display: inline-block;
+            padding: 6px 14px;
+            background-color: rgba(255,255,255,0.25);
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+        .content {
+            padding: 30px;
+        }
+        .alert-section {
+            background-color: #f9f9f9;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid {{.SeverityColor}};
+            border-radius: 4px;
+        }
+        .alert-section h2 {
+            margin: 0 0 15px 0;
+            font-size: 18px;
+            color: #555;
+            font-weight: 600;
+        }
+        .alert-message {
+            background-color: white;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-size: 15px;
+            line-height: 1.8;
+            color: #444;
+        }
+        .detail-row {
+            margin: 10px 0;
+            padding: 8px 0;
+        }
+        .detail-label {
+            font-weight: 600;
+            color: #666;
+            display: inline-block;
+            min-width: 80px;
+        }
+        .detail-value {
+            color: #333;
+        }
+        .action-button {
+            display: inline-block;
+            padding: 12px 28px;
+            background-color: {{.SeverityColor}};
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            margin-top: 20px;
+            font-weight: 600;
+            transition: opacity 0.2s;
+        }
+        .action-button:hover {
+            opacity: 0.9;
+        }
+        .footer {
+            margin-top: 30px;
+            padding: 25px 30px;
+            background-color: #fafafa;
+            border-top: 2px solid #e9e9e9;
+            font-size: 13px;
+            color: #999;
+            text-align: center;
+        }
+        .footer p {
+            margin: 8px 0;
+        }
+        .footer a {
+            color: #4CAF50;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .footer a:hover {
+            text-decoration: underline;
+        }
+        .divider {
+            height: 1px;
+            background-color: #e0e0e0;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="header">
+            <h1>{{.Title}}</h1>
+            <span class="severity-badge">严重程度: {{.Severity}}</span>
+        </div>
+
+        <div class="content">
+            <div class="alert-section">
+                <h2>告警消息</h2>
+                <div class="alert-message">{{.Message}}</div>
+            </div>
+
+            <div class="alert-section">
+                <h2>告警详情</h2>
+                <div class="detail-row">
+                    <span class="detail-label">类型:</span>
+                    <span class="detail-value">{{.AlertType}}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">时间:</span>
+                    <span class="detail-value">{{.CreatedAt}}</span>
+                </div>
+                {{if .DeviceID}}
+                <div class="detail-row">
+                    <span class="detail-label">设备ID:</span>
+                    <span class="detail-value">{{.DeviceID}}</span>
+                </div>
+                {{end}}
+            </div>
+
+            <div class="divider"></div>
+
+            <div style="text-align: center;">
+                <a href="#" class="action-button">查看详情</a>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p><strong>EdgeLink告警系统</strong></p>
+            <p>此邮件由系统自动发送,请勿直接回复</p>
+            <p>如需了解更多信息或采取行动,请访问 <a href="#">EdgeLink管理控制台</a></p>
+            <p style="margin-top: 15px; font-size: 11px; color: #aaa;">
+                © 2025 EdgeLink. All rights reserved.
+            </p>
+        </div>
+    </div>
+</body>
+</html>

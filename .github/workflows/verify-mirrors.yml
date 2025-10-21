@@ -1,0 +1,47 @@
+name: Verify Dependency Mirrors
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'  # 每6小时
+  workflow_dispatch:
+
+env:
+  GO_PROXY: https://goproxy.cn
+  NPM_REGISTRY: https://registry.npmmirror.com
+
+jobs:
+  verify-go-proxy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+      
+      - name: Test Go Proxy
+        run: |
+          go env -w GOPROXY=$GO_PROXY,direct
+          go install golang.org/x/tools/cmd/goimports@latest
+          echo "✅ Go Proxy working"
+
+  verify-npm-registry:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Test npm Registry
+        run: |
+          npm config set registry $NPM_REGISTRY
+          npm info react@latest
+          echo "✅ npm Registry working"
+
+  verify-docker-registry:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test Docker Hub
+        run: |
+          docker pull alpine:3.18
+          echo "✅ Docker Hub accessible"

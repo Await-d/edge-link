@@ -1,0 +1,68 @@
+# Athens Go Module Proxy Configuration
+# https://docs.gomods.io/configuration/
+
+[server]
+# Port that Athens服务监听的端口
+Port = ":3000"
+
+# Timeout for external network calls
+Timeout = "300s"
+
+[storage]
+# 存储类型: memory, disk, mongo, gcp, s3, minio, azureblob
+Type = "disk"
+
+[storage.disk]
+# 磁盘存储根目录
+RootPath = "/var/lib/athens"
+
+[download]
+# 下载模式: sync（同步）, async（异步）, redirect（重定向）, async_redirect
+Mode = "sync"
+
+# Go module下载的upstream proxy
+# 如果Athens缓存未命中，会从这些源获取
+UpstreamProxy = "https://goproxy.cn,https://proxy.golang.org,direct"
+
+[olympus]
+# Olympus服务地址（用于公共模块索引）
+# 设置为空字符串禁用
+Host = ""
+
+[sumdb]
+# Go checksum database verification
+# 启用此项以验证模块完整性
+Enabled = true
+Verifier = "sum.golang.org"
+
+[proxy]
+# 过滤规则：哪些模块不应该被Athens缓存
+# 使用GOPRIVATE语法
+Filter = "github.com/edgelink/*,gitlab.edgelink.com/*"
+
+[log]
+# 日志级别: debug, info, warning, error, fatal, panic
+Level = "info"
+
+# 日志格式: json, text
+Format = "json"
+
+[index]
+# MySQL数据库配置（可选，用于模块索引）
+# Enabled = true
+# Type = "mysql"
+# ConnectString = "user:password@tcp(mysql:3306)/athens"
+
+[network]
+# HTTP超时配置
+Timeout = "30s"
+
+# 允许的CORS origins
+# CorsOrigins = ["*"]
+
+[cache]
+# 缓存清理策略
+# CleanupInterval = "24h"
+
+# 最大缓存大小（字节）
+# MaxSize = 10737418240  # 10GB

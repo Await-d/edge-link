@@ -1,0 +1,11 @@
+DROP TRIGGER IF EXISTS update_alerts_updated_at ON alerts;
+DROP INDEX IF EXISTS idx_alerts_device_id;
+DROP INDEX IF EXISTS idx_alerts_severity;
+DROP INDEX IF EXISTS idx_alerts_type;
+DROP INDEX IF EXISTS idx_alerts_status;
+DROP INDEX IF EXISTS idx_alerts_created_at;
+DROP INDEX IF EXISTS idx_alerts_metadata;
+DROP TABLE IF EXISTS alerts;
+DROP TYPE IF EXISTS severity_enum;
+DROP TYPE IF EXISTS alert_type_enum;
+DROP TYPE IF EXISTS alert_status_enum;

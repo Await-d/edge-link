@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EdgeLink Alert Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .header {
+            background-color: #4CAF50;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        .content {
+            padding: 30px;
+        }
+        .content h2 {
+            color: #4CAF50;
+        }
+        .footer {
+            padding: 20px;
+            background-color: #fafafa;
+            text-align: center;
+            font-size: 12px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>EdgeLink邮件系统测试</h1>
+        </div>
+        <div class="content">
+            <h2>邮件配置成功</h2>
+            <p>这是一封测试邮件,用于验证EdgeLink邮件通知系统配置是否正确。</p>
+            <p>如果您收到此邮件,说明邮件发送功能已正常工作。</p>
+            <p><strong>测试时间:</strong> {{.TestTime}}</p>
+        </div>
+        <div class="footer">
+            <p>EdgeLink Alert System - Test Email</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,100 @@
+syntax = "proto3";
+
+package edgelink.topology.v1;
+
+option go_package = "github.com/edgelink/backend/pkg/api/topologypb";
+
+import "google/protobuf/timestamp.proto";
+
+// TopologyService 拓扑管理gRPC服务
+service TopologyService {
+  // AllocateVirtualIP 分配虚拟IP
+  rpc AllocateVirtualIP(AllocateVirtualIPRequest) returns (AllocateVirtualIPResponse);
+
+  // GetPeerConfigurations 获取对等设备配置
+  rpc GetPeerConfigurations(GetPeerConfigurationsRequest) returns (GetPeerConfigurationsResponse);
+
+  // GenerateWireGuardConfig 生成WireGuard配置
+  rpc GenerateWireGuardConfig(GenerateWireGuardConfigRequest) returns (GenerateWireGuardConfigResponse);
+
+  // RefreshTopology 刷新虚拟网络拓扑
+  rpc RefreshTopology(RefreshTopologyRequest) returns (RefreshTopologyResponse);
+
+  // ReleaseVirtualIP 释放虚拟IP
+  rpc ReleaseVirtualIP(ReleaseVirtualIPRequest) returns (ReleaseVirtualIPResponse);
+}
+
+// AllocateVirtualIPRequest 分配虚拟IP请求
+message AllocateVirtualIPRequest {
+  string virtual_network_id = 1;
+}
+
+// AllocateVirtualIPResponse 分配虚拟IP响应
+message AllocateVirtualIPResponse {
+  string virtual_ip = 1;
+}
+
+// GetPeerConfigurationsRequest 获取对等配置请求
+message GetPeerConfigurationsRequest {
+  string device_id = 1;
+}
+
+// GetPeerConfigurationsResponse 获取对等配置响应
+message GetPeerConfigurationsResponse {
+  repeated PeerConfig peers = 1;
+}
+
+// PeerConfig 对等设备配置
+message PeerConfig {
+  string public_key = 1;
+  repeated string allowed_ips = 2;
+  string endpoint = 3;
+  int32 persistent_keepalive = 4;
+}
+
+// GenerateWireGuardConfigRequest 生成WireGuard配置请求
+message GenerateWireGuardConfigRequest {
+  string device_id = 1;
+  string private_key = 2;
+}
+
+// GenerateWireGuardConfigResponse 生成WireGuard配置响应
+message GenerateWireGuardConfigResponse {
+  WireGuardConfig config = 1;
+}
+
+// WireGuardConfig WireGuard完整配置
+message WireGuardConfig {
+  InterfaceConfig interface = 1;
+  repeated PeerConfig peers = 2;
+}
+
+// InterfaceConfig 接口配置
+message InterfaceConfig {
+  string private_key = 1;
+  string address = 2;
+  int32 listen_port = 3;
+  repeated string dns = 4;
+}
+
+// RefreshTopologyRequest 刷新拓扑请求
+message RefreshTopologyRequest {
+  string virtual_network_id = 1;
+}
+
+// RefreshTopologyResponse 刷新拓扑响应
+message RefreshTopologyResponse {
+  bool success = 1;
+  int32 devices_updated = 2;
+}
+
+// ReleaseVirtualIPRequest 释放虚拟IP请求
+message ReleaseVirtualIPRequest {
+  string virtual_network_id = 1;
+  string virtual_ip = 2;
+}
+
+// ReleaseVirtualIPResponse 释放虚拟IP响应
+message ReleaseVirtualIPResponse {
+  bool success = 1;
+}

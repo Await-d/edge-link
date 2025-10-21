@@ -1,0 +1,208 @@
+version: '3.8'
+
+# ============================================
+# EdgeLink Development Environment
+# ============================================
+# This docker-compose file is for local development only.
+# For production deployment, use Kubernetes with Helm charts.
+#
+# Usage:
+#   docker-compose up -d                    # Start all services
+#   docker-compose up -d postgres redis     # Start only infrastructure
+#   docker-compose logs -f api-gateway      # View logs
+#   docker-compose down -v                  # Stop and remove volumes
+# ============================================
+
+# Global build arguments (can be overridden via .env file)
+x-build-args: &build-args
+  VERSION: ${VERSION:-v0.0.0-dev}
+  COMMIT_SHA: ${COMMIT_SHA:-unknown}
+  BUILD_DATE: ${BUILD_DATE:-}
+
+services:
+  # PostgreSQL数据库
+  postgres:
+    image: postgres:15-alpine@sha256:e9722e80d19c0a5e68ec6d94935ca5d3c59e5455e0d479a8e1f446a57c4e3db8
+    container_name: edgelink-postgres
+    environment:
+      POSTGRES_DB: edgelink
+      POSTGRES_USER: edgelink
+      POSTGRES_PASSWORD: edgelink_dev_password
+    ports:
+      - "54320:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U edgelink"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - edgelink-network
+
+  # Redis缓存
+  redis:
+    image: redis:7-alpine@sha256:de13e74e14b98eb96bdf886791ae47686c3c5d29f9d5f85ea55206843e3fce26
+    container_name: edgelink-redis
+    ports:
+      - "63790:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - edgelink-network
+
+  # API Gateway (单体应用，包含所有服务)
+  api-gateway:
+    image: ${REGISTRY:-edgelink}/api-gateway:${VERSION:-v0.0.0-dev}
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.api-gateway
+      args:
+        <<: *build-args
+    container_name: edgelink-api-gateway
+    ports:
+      - "18080:8080"
+    environment:
+      - SERVER_PORT=8080
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=edgelink
+      - DB_USER=edgelink
+      - DB_PASSWORD=edgelink_dev_password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - STUN_SERVER_ADDRESS=stun.l.google.com:19302
+      - JWT_SECRET=dev_jwt_secret_change_in_production
+      - LOG_LEVEL=debug
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - edgelink-network
+    restart: unless-stopped
+
+  # Frontend (React SPA)
+  frontend:
+    image: ${REGISTRY:-edgelink}/frontend:${VERSION:-v0.0.0-dev}
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+      args:
+        <<: *build-args
+    container_name: edgelink-frontend
+    ports:
+      - "13000:80"
+    depends_on:
+      - api-gateway
+    networks:
+      - edgelink-network
+    restart: unless-stopped
+
+  # Alert Service
+  alert-service:
+    image: ${REGISTRY:-edgelink}/alert-service:${VERSION:-v0.0.0-dev}
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.alert-service
+      args:
+        <<: *build-args
+    container_name: edgelink-alert-service
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=edgelink
+      - DB_USER=edgelink
+      - DB_PASSWORD=edgelink_dev_password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - LOG_LEVEL=info
+      # Email Provider Configuration
+      - EMAIL_PROVIDER=smtp
+      # SMTP Configuration (Gmail example)
+      - SMTP_HOST=smtp.gmail.com
+      - SMTP_PORT=587
+      - SMTP_USERNAME=your-email@gmail.com
+      - SMTP_PASSWORD=your-app-password
+      - SMTP_USE_TLS=false
+      - SMTP_USE_STARTTLS=true
+      - SMTP_SKIP_VERIFY=false
+      - SMTP_TIMEOUT=10s
+      # SendGrid Configuration (alternative)
+      # - EMAIL_PROVIDER=sendgrid
+      # - SENDGRID_API_KEY=your-sendgrid-api-key
+      # - SENDGRID_SANDBOX_MODE=false
+      # Mailgun Configuration (alternative)
+      # - EMAIL_PROVIDER=mailgun
+      # - MAILGUN_DOMAIN=your-domain.com
+      # - MAILGUN_API_KEY=your-mailgun-api-key
+      # - MAILGUN_BASE_URL=https://api.mailgun.net
+      # Amazon SES Configuration (alternative)
+      # - EMAIL_PROVIDER=ses
+      # - AWS_SES_REGION=us-east-1
+      # - AWS_ACCESS_KEY_ID=your-access-key
+      # - AWS_SECRET_ACCESS_KEY=your-secret-key
+      # - AWS_SES_CONFIG_SET=optional-config-set
+      # Email Sender Configuration
+      - EMAIL_FROM_ADDRESS=noreply@edgelink.com
+      - EMAIL_FROM_NAME=EdgeLink Alert System
+      - EMAIL_REPLY_TO=support@edgelink.com
+      # Queue and Retry Configuration
+      - EMAIL_QUEUE_SIZE=1000
+      - EMAIL_MAX_RETRIES=3
+      - EMAIL_RETRY_DELAY=5s
+      # Rate Limiting
+      - EMAIL_RATE_LIMIT=100
+      - EMAIL_RATE_PERIOD=1m
+      # Template Configuration
+      - EMAIL_TEMPLATE_DIR=./templates/email
+      - EMAIL_DEFAULT_LANG=zh-CN
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - edgelink-network
+    restart: unless-stopped
+
+  # Background Worker
+  background-worker:
+    image: ${REGISTRY:-edgelink}/background-worker:${VERSION:-v0.0.0-dev}
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.background-worker
+      args:
+        <<: *build-args
+    container_name: edgelink-background-worker
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=edgelink
+      - DB_USER=edgelink
+      - DB_PASSWORD=edgelink_dev_password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - LOG_LEVEL=info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - edgelink-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  edgelink-network:
+    driver: bridge

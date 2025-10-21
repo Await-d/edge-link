@@ -1,0 +1,130 @@
+# Alert Service Integrations Configuration
+# 告警服务集成配置示例
+
+integrations:
+  # PagerDuty集成
+  pagerduty:
+    enabled: true
+    priority: 1  # 优先级（1最高）
+    integration_key: "${PAGERDUTY_INTEGRATION_KEY}"  # 从环境变量读取
+    default_service: "edge-link"
+
+    # 严重程度映射
+    severity_map:
+      critical: "critical"
+      high: "error"
+      medium: "warning"
+      low: "info"
+
+    # 重试配置
+    retry_config:
+      max_retries: 3
+      initial_delay: 2s
+      max_delay: 30s
+      backoff_factor: 2.0
+
+  # Opsgenie集成
+  opsgenie:
+    enabled: true
+    priority: 2
+    api_key: "${OPSGENIE_API_KEY}"
+    default_teams:
+      - "network-ops"
+      - "platform-team"
+    default_tags:
+      - "edgelink"
+      - "production"
+
+    # 优先级映射
+    priority_map:
+      critical: "P1"
+      high: "P2"
+      medium: "P3"
+      low: "P4"
+
+    retry_config:
+      max_retries: 3
+      initial_delay: 2s
+      max_delay: 30s
+      backoff_factor: 2.0
+
+  # Slack集成
+  slack:
+    enabled: true
+    priority: 3
+    webhook_url: "${SLACK_WEBHOOK_URL}"
+    channel: "#alerts"  # 覆盖webhook默认频道（可选）
+    username: "EdgeLink Alert Bot"
+    icon_emoji: ":warning:"
+
+    # 颜色映射（十六进制）
+    color_map:
+      critical: "#FF0000"
+      high: "#FF6600"
+      medium: "#FFCC00"
+      low: "#36A64F"
+
+    retry_config:
+      max_retries: 2
+      initial_delay: 1s
+      max_delay: 10s
+      backoff_factor: 2.0
+
+  # Discord集成
+  discord:
+    enabled: false
+    priority: 4
+    webhook_url: "${DISCORD_WEBHOOK_URL}"
+    username: "EdgeLink Alert Bot"
+    avatar_url: "https://example.com/avatar.png"
+
+    # 颜色映射（十进制）
+    color_map:
+      critical: 16711680  # 红色 #FF0000
+      high: 16744192      # 橙色 #FF6600
+      medium: 16776960    # 黄色 #FFFF00
+      low: 3581519        # 绿色 #36A64F
+
+    retry_config:
+      max_retries: 2
+      initial_delay: 1s
+      max_delay: 10s
+      backoff_factor: 2.0
+
+  # Microsoft Teams集成
+  teams:
+    enabled: false
+    priority: 5
+    webhook_url: "${TEAMS_WEBHOOK_URL}"
+
+    # 颜色映射（十六进制，无#前缀）
+    color_map:
+      critical: "FF0000"
+      high: "FF6600"
+      medium: "FFCC00"
+      low: "36A64F"
+
+    retry_config:
+      max_retries: 2
+      initial_delay: 1s
+      max_delay: 10s
+      backoff_factor: 2.0
+
+# 环境变量说明：
+# PAGERDUTY_INTEGRATION_KEY - PagerDuty Integration Key（从Events Integration获取）
+# OPSGENIE_API_KEY - Opsgenie API Key（从API Key Management获取）
+# SLACK_WEBHOOK_URL - Slack Incoming Webhook URL
+# DISCORD_WEBHOOK_URL - Discord Webhook URL
+# TEAMS_WEBHOOK_URL - Microsoft Teams Incoming Webhook URL
+
+# 优先级说明：
+# - 数字越小优先级越高
+# - 用于备用通道路由（当高优先级平台失败时尝试低优先级平台）
+# - 建议：PagerDuty (1) > Opsgenie (2) > Slack (3) > Discord (4) > Teams (5)
+
+# 重试策略：
+# - max_retries: 最大重试次数
+# - initial_delay: 初始延迟时间
+# - max_delay: 最大延迟时间
+# - backoff_factor: 退避因子（指数退避）
+# - 例如：2s -> 4s -> 8s -> 16s (factor=2.0)

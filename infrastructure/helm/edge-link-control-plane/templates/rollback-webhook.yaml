@@ -1,0 +1,203 @@
+{{- if .Values.monitoring.autoRollback.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "edge-link-control-plane.fullname" . }}-rollback-webhook
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "edge-link-control-plane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rollback-webhook
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: webhook
+      protocol: TCP
+      name: webhook
+  selector:
+    {{- include "edge-link-control-plane.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: rollback-webhook
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "edge-link-control-plane.fullname" . }}-rollback-webhook
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "edge-link-control-plane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rollback-webhook
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "edge-link-control-plane.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: rollback-webhook
+  template:
+    metadata:
+      labels:
+        {{- include "edge-link-control-plane.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: rollback-webhook
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: {{ include "edge-link-control-plane.fullname" . }}-rollback
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: webhook
+          image: "curlimages/curl:8.5.0"
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              #!/bin/sh
+              set -e
+              
+              # Simple webhook receiver using netcat
+              while true; do
+                echo "Rollback webhook listening on :8080"
+                echo -e "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{\"status\":\"received\"}" | nc -l -p 8080 -q 1 | while read line; do
+                  if echo "$line" | grep -q "POST /webhook"; then
+                    # Extract alert data and trigger rollback
+                    echo "Received rollback webhook request"
+                    
+                    # Parse deployment from alert (this is a simplified example)
+                    # In production, use a proper webhook receiver like AlertManager webhook receiver
+                    DEPLOYMENT=$(echo "$line" | grep -oP 'deployment=[^&]*' | cut -d= -f2 || echo "")
+                    REASON=$(echo "$line" | grep -oP 'reason=[^&]*' | cut -d= -f2 || echo "auto-rollback")
+                    
+                    if [ -n "$DEPLOYMENT" ]; then
+                      echo "Triggering rollback for deployment: $DEPLOYMENT"
+                      /scripts/auto-rollback.sh "$DEPLOYMENT" "$REASON" &
+                    fi
+                  fi
+                done
+              done
+          ports:
+            - name: webhook
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: NAMESPACE
+              value: {{ .Release.Namespace }}
+            - name: DEPLOYMENT_PREFIX
+              value: "edgelink"
+            - name: DRY_RUN
+              value: {{ .Values.monitoring.autoRollback.dryRun | quote }}
+            - name: MAX_ROLLBACK_RETRIES
+              value: {{ .Values.monitoring.autoRollback.maxRetries | quote }}
+            - name: ROLLBACK_TIMEOUT
+              value: {{ .Values.monitoring.autoRollback.timeout | quote }}
+            - name: WEBHOOK_URL
+              value: {{ .Values.monitoring.autoRollback.webhookUrl | quote }}
+          volumeMounts:
+            - name: rollback-script
+              mountPath: /scripts
+          resources:
+            {{- toYaml .Values.monitoring.autoRollback.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+      volumes:
+        - name: rollback-script
+          configMap:
+            name: {{ include "edge-link-control-plane.fullname" . }}-rollback-script
+            defaultMode: 0755
+
+---
+# Alertmanager configuration for webhook routing
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "edge-link-control-plane.fullname" . }}-alertmanager-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "edge-link-control-plane.labels" . | nindent 4 }}
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 5m
+
+    route:
+      group_by: ['alertname', 'cluster', 'service']
+      group_wait: 10s
+      group_interval: 10s
+      repeat_interval: 12h
+      receiver: 'default'
+      routes:
+        # Auto-rollback route
+        - match:
+            auto_rollback: "true"
+          receiver: 'auto-rollback-webhook'
+          continue: true
+        
+        # Critical alerts to PagerDuty/Slack
+        - match:
+            severity: critical
+          receiver: 'critical-alerts'
+          continue: true
+        
+        # Warning alerts
+        - match:
+            severity: warning
+          receiver: 'warning-alerts'
+
+    receivers:
+      - name: 'default'
+        webhook_configs:
+          - url: 'http://{{ include "edge-link-control-plane.fullname" . }}-rollback-webhook:8080/webhook'
+            send_resolved: true
+
+      - name: 'auto-rollback-webhook'
+        webhook_configs:
+          - url: 'http://{{ include "edge-link-control-plane.fullname" . }}-rollback-webhook:8080/webhook'
+            send_resolved: false
+            http_config:
+              follow_redirects: true
+
+      - name: 'critical-alerts'
+        {{- if .Values.monitoring.alerting.slack.enabled }}
+        slack_configs:
+          - api_url: {{ .Values.monitoring.alerting.slack.webhookUrl | quote }}
+            channel: {{ .Values.monitoring.alerting.slack.channel | quote }}
+            title: {{ `'[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'` }}
+            text: {{ `'{{ range .Alerts }}{{ .Annotations.description }}\n{{ end }}'` }}
+            send_resolved: true
+        {{- end }}
+        {{- if .Values.monitoring.alerting.pagerduty.enabled }}
+        pagerduty_configs:
+          - service_key: {{ .Values.monitoring.alerting.pagerduty.serviceKey | quote }}
+            description: {{ `'{{ .CommonAnnotations.summary }}'` }}
+        {{- end }}
+
+      - name: 'warning-alerts'
+        {{- if .Values.monitoring.alerting.email.enabled }}
+        email_configs:
+          - to: {{ .Values.monitoring.alerting.email.to | quote }}
+            from: {{ .Values.monitoring.alerting.email.from | quote }}
+            smarthost: {{ .Values.monitoring.alerting.email.smarthost | quote }}
+            auth_username: {{ .Values.monitoring.alerting.email.username | quote }}
+            auth_password: {{ .Values.monitoring.alerting.email.password | quote }}
+            headers:
+              Subject: {{ `'[EdgeLink] {{ .CommonLabels.alertname }}'` }}
+        {{- end }}
+
+    inhibit_rules:
+      # Inhibit warning alerts if critical alert is firing
+      - source_match:
+          severity: 'critical'
+        target_match:
+          severity: 'warning'
+        equal: ['alertname', 'service']
+
+{{- end }}

@@ -1,0 +1,52 @@
+# Go specific
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+*.coverprofile
+coverage.html
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+
+# Binary output
+bin/
+dist/
+*.o
+*.a
+
+# IDE
+.idea/
+.vscode/
+
+# Environment variables
+.env
+.env.local
+
+# Temporary files
+tmp/
+*.tmp
+
+# Database files (local development)
+*.db
+*.sqlite
+*.sqlite3
+
+# Generated files
+*.pb.go
+*.pb.gw.go
+*_generated.go
+
+# Air live reload (if used)
+tmp/
+.air.toml

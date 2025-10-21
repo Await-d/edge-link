@@ -1,0 +1,285 @@
+version: "1.0"
+
+rules:
+  # 关键告警立即通知管理员
+  - id: "critical-alerts"
+    name: "Critical Alerts Immediate Notification"
+    description: "立即通知管理员所有关键告警"
+    enabled: true
+    priority: 10
+    conditions:
+      severity:
+        - critical
+    actions:
+      - type: email
+        enabled: true
+        config:
+          recipients:
+            - admin@example.com
+            - ops-team@example.com
+      - type: pagerduty
+        enabled: true
+        config:
+          service_key: "YOUR_PAGERDUTY_SERVICE_KEY"
+      - type: dingtalk
+        enabled: false
+        config:
+          webhook_url: "https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN"
+          at_mobiles:
+            - "13800138000"
+    rate_limit:
+      max_notifications: 10
+      window: 1h
+      scope: "per_rule"
+    escalation:
+      enabled: true
+      wait_duration: 15m
+      escalate_to:
+        - type: slack
+          enabled: true
+          config:
+            webhook_url: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+            channel: "#critical-alerts"
+      repeat_interval: 30m
+      max_repeat: 3
+
+  # 高优先级告警（工作时间）
+  - id: "high-alerts-office-hours"
+    name: "High Priority Alerts During Office Hours"
+    description: "工作时间的高优先级告警通知"
+    enabled: true
+    priority: 20
+    conditions:
+      severity:
+        - high
+      time_range:
+        start: "09:00"
+        end: "18:00"
+        timezone: "Asia/Shanghai"
+        weekdays:
+          - Monday
+          - Tuesday
+          - Wednesday
+          - Thursday
+          - Friday
+    actions:
+      - type: slack
+        enabled: true
+        config:
+          webhook_url: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+          channel: "#alerts"
+          username: "EdgeLink Alerts"
+      - type: email
+        enabled: true
+        config:
+          recipients:
+            - team@example.com
+    rate_limit:
+      max_notifications: 20
+      window: 1h
+      scope: "per_device"
+
+  # 设备离线告警
+  - id: "device-offline"
+    name: "Device Offline Alert"
+    description: "设备离线告警通知"
+    enabled: true
+    priority: 30
+    conditions:
+      alert_types:
+        - device_offline
+      severity:
+        - high
+        - critical
+    actions:
+      - type: webhook
+        enabled: true
+        config:
+          url: "https://your-webhook-endpoint.com/alerts"
+      - type: wechat
+        enabled: false
+        config:
+          webhook_url: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY"
+    escalation:
+      enabled: true
+      wait_duration: 10m
+      escalate_to:
+        - type: email
+          enabled: true
+          config:
+            recipients:
+              - supervisor@example.com
+
+  # 高延迟告警（中等优先级）
+  - id: "high-latency-medium"
+    name: "High Latency Medium Priority"
+    description: "中等优先级的高延迟告警"
+    enabled: true
+    priority: 40
+    conditions:
+      alert_types:
+        - high_latency
+      severity:
+        - medium
+    actions:
+      - type: dingtalk
+        enabled: true
+        config:
+          webhook_url: "https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN"
+    rate_limit:
+      max_notifications: 5
+      window: 30m
+      scope: "per_device"
+
+  # 特定设备组告警
+  - id: "production-devices"
+    name: "Production Devices Alert"
+    description: "生产环境设备告警"
+    enabled: true
+    priority: 15
+    conditions:
+      device_tags:
+        - production
+        - critical-infrastructure
+      severity:
+        - critical
+        - high
+    actions:
+      - type: pagerduty
+        enabled: true
+        config:
+          service_key: "YOUR_PRODUCTION_SERVICE_KEY"
+      - type: email
+        enabled: true
+        config:
+          recipients:
+            - production-team@example.com
+
+  # 夜间告警（仅关键级别）
+  - id: "after-hours-critical"
+    name: "After Hours Critical Only"
+    description: "非工作时间只通知关键告警"
+    enabled: true
+    priority: 25
+    conditions:
+      all_of:
+        - severity:
+            - critical
+        - any_of:
+            - time_range:
+                start: "18:00"
+                end: "09:00"
+                timezone: "Asia/Shanghai"
+                weekdays:
+                  - Monday
+                  - Tuesday
+                  - Wednesday
+                  - Thursday
+                  - Friday
+            - time_range:
+                start: "00:00"
+                end: "23:59"
+                timezone: "Asia/Shanghai"
+                weekdays:
+                  - Saturday
+                  - Sunday
+    actions:
+      - type: pagerduty
+        enabled: true
+        config:
+          service_key: "YOUR_ONCALL_SERVICE_KEY"
+
+  # 维护窗口静默规则
+  - id: "maintenance-window"
+    name: "Maintenance Window Silence"
+    description: "维护窗口期间静默低优先级告警"
+    enabled: true
+    priority: 50
+    conditions:
+      severity:
+        - low
+        - medium
+    actions:
+      - type: email
+        enabled: true
+        config:
+          recipients:
+            - maintenance-log@example.com
+    silence:
+      enabled: true
+      comment: "Weekly maintenance window"
+      time_ranges:
+        - start: "02:00"
+          end: "04:00"
+          timezone: "Asia/Shanghai"
+          weekdays:
+            - Sunday
+
+  # 认证失败告警
+  - id: "auth-failures"
+    name: "Authentication Failures"
+    description: "认证失败告警"
+    enabled: true
+    priority: 35
+    conditions:
+      alert_types:
+        - failed_auth
+      message_match: ".*authentication failed.*"
+    actions:
+      - type: slack
+        enabled: true
+        config:
+          webhook_url: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+          channel: "#security-alerts"
+      - type: email
+        enabled: true
+        config:
+          recipients:
+            - security@example.com
+    rate_limit:
+      max_notifications: 3
+      window: 10m
+      scope: "per_device"
+
+  # 自定义Webhook示例
+  - id: "custom-webhook"
+    name: "Custom Webhook Integration"
+    description: "自定义webhook集成示例"
+    enabled: false
+    priority: 100
+    conditions:
+      severity:
+        - high
+        - critical
+    actions:
+      - type: custom
+        enabled: true
+        config:
+          url: "https://your-custom-endpoint.com/alerts"
+          method: "POST"
+          body:
+            service: "edgelink"
+            environment: "production"
+            alert_id: "{{ .Alert.ID }}"
+            severity: "{{ .Alert.Severity }}"
+        retry_policy:
+          max_retries: 5
+          retry_delay: 10s
+          backoff_rate: 2.0
+
+  # Telegram通知示例
+  - id: "telegram-notifications"
+    name: "Telegram Notifications"
+    description: "通过Telegram发送告警"
+    enabled: false
+    priority: 45
+    conditions:
+      severity:
+        - critical
+        - high
+    actions:
+      - type: telegram
+        enabled: true
+        config:
+          bot_token: "YOUR_BOT_TOKEN"
+          chat_id: "YOUR_CHAT_ID"

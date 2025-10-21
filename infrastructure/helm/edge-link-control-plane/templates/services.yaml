@@ -1,0 +1,89 @@
+# API Gateway Service
+{{- if .Values.apiGateway.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "edge-link-control-plane.fullname" . }}-api-gateway
+  labels:
+    {{- include "edge-link-control-plane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api-gateway
+spec:
+  type: {{ .Values.apiGateway.service.type }}
+  ports:
+    - port: {{ .Values.apiGateway.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "edge-link-control-plane.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: api-gateway
+{{- end }}
+
+---
+
+# Device Service
+{{- if .Values.deviceService.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "edge-link-control-plane.fullname" . }}-device-service
+  labels:
+    {{- include "edge-link-control-plane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: device-service
+spec:
+  type: {{ .Values.deviceService.service.type }}
+  ports:
+    - port: {{ .Values.deviceService.service.port }}
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+  selector:
+    {{- include "edge-link-control-plane.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: device-service
+{{- end }}
+
+---
+
+# Topology Service
+{{- if .Values.topologyService.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "edge-link-control-plane.fullname" . }}-topology-service
+  labels:
+    {{- include "edge-link-control-plane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: topology-service
+spec:
+  type: {{ .Values.topologyService.service.type }}
+  ports:
+    - port: {{ .Values.topologyService.service.port }}
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+  selector:
+    {{- include "edge-link-control-plane.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: topology-service
+{{- end }}
+
+---
+
+# NAT Coordinator Service
+{{- if .Values.natCoordinator.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "edge-link-control-plane.fullname" . }}-nat-coordinator
+  labels:
+    {{- include "edge-link-control-plane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nat-coordinator
+spec:
+  type: {{ .Values.natCoordinator.service.type }}
+  ports:
+    - port: {{ .Values.natCoordinator.service.port }}
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+  selector:
+    {{- include "edge-link-control-plane.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: nat-coordinator
+{{- end }}

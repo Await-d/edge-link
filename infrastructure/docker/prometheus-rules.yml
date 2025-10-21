@@ -1,0 +1,98 @@
+# EdgeLink Prometheus Alerting Rules
+# For local development and testing
+
+groups:
+  # Deployment Health Alerts (simplified for local dev)
+  - name: edgelink.deployment.health
+    interval: 30s
+    rules:
+      # High Error Rate Alert
+      - alert: EdgeLinkHighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{job=~"edgelink-.*", status=~"5.."}[5m])) by (service)
+            /
+            sum(rate(http_requests_total{job=~"edgelink-.*"}[5m])) by (service)
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+          component: deployment
+          action: rollback
+          auto_rollback: "true"
+        annotations:
+          summary: "High error rate detected in {{ $labels.service }}"
+          description: "Service {{ $labels.service }} has error rate {{ $value | humanizePercentage }} (threshold: 5%)"
+          runbook_url: "https://docs.edgelink.com/runbooks/high-error-rate"
+
+      # High Latency Alert
+      - alert: EdgeLinkHighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket{job=~"edgelink-.*"}[5m])) by (service, le)
+          ) > 0.5
+        for: 3m
+        labels:
+          severity: critical
+          component: deployment
+          action: rollback
+          auto_rollback: "true"
+        annotations:
+          summary: "High P95 latency in {{ $labels.service }}"
+          description: "Service {{ $labels.service }} P95 latency is {{ $value | humanizeDuration }} (threshold: 500ms)"
+          runbook_url: "https://docs.edgelink.com/runbooks/high-latency"
+
+  # Application-Specific Alerts
+  - name: edgelink.application.health
+    interval: 30s
+    rules:
+      # Device Connection Failure Rate
+      - alert: EdgeLinkDeviceConnectionFailures
+        expr: |
+          (
+            sum(rate(edgelink_device_connection_failures_total[5m]))
+            /
+            sum(rate(edgelink_device_connection_attempts_total[5m]))
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: device-service
+          action: investigate
+        annotations:
+          summary: "High device connection failure rate"
+          description: "Device connection failure rate is {{ $value | humanizePercentage }}"
+
+      # NAT Traversal Failures
+      - alert: EdgeLinkNATTraversalFailures
+        expr: |
+          (
+            sum(rate(edgelink_nat_traversal_failures_total[10m]))
+            /
+            sum(rate(edgelink_nat_traversal_attempts_total[10m]))
+          ) > 0.3
+        for: 5m
+        labels:
+          severity: warning
+          component: nat-coordinator
+          action: investigate
+        annotations:
+          summary: "High NAT traversal failure rate"
+          description: "NAT traversal failure rate is {{ $value | humanizePercentage }}"
+
+      # Database Connection Pool Exhaustion
+      - alert: EdgeLinkDatabasePoolExhaustion
+        expr: |
+          (
+            edgelink_db_connections_in_use
+            /
+            edgelink_db_connections_max
+          ) > 0.9
+        for: 3m
+        labels:
+          severity: critical
+          component: database
+          action: investigate
+        annotations:
+          summary: "Database connection pool near exhaustion"
+          description: "Database pool usage is {{ $value | humanizePercentage }}"

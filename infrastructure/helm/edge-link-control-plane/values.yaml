@@ -1,0 +1,417 @@
+# EdgeLink Control Plane Default Configuration
+
+# Global settings
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+
+# API Gateway configuration
+apiGateway:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: edgelink/api-gateway
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8080
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+  env:
+    LOG_LEVEL: "info"
+    SERVER_PORT: "8080"
+
+# Device Service configuration
+deviceService:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: edgelink/device-service
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 50051
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+  env:
+    LOG_LEVEL: "info"
+    GRPC_PORT: "50051"
+
+# Topology Service configuration
+topologyService:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: edgelink/topology-service
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 50052
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+  env:
+    LOG_LEVEL: "info"
+    GRPC_PORT: "50052"
+
+# NAT Coordinator configuration
+natCoordinator:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: edgelink/nat-coordinator
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 50053
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+  env:
+    LOG_LEVEL: "info"
+    GRPC_PORT: "50053"
+    STUN_SERVER_ADDRESS: "stun.l.google.com:19302"
+
+# Alert Service configuration
+alertService:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: edgelink/alert-service
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: 300m
+      memory: 256Mi
+    requests:
+      cpu: 150m
+      memory: 128Mi
+  logLevel: "info"
+  smtp:
+    host: "smtp.gmail.com"
+    port: "587"
+    user: "noreply@edgelink.com"
+    existingSecret: ""
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# Background Worker configuration
+backgroundWorker:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: edgelink/background-worker
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: 300m
+      memory: 256Mi
+    requests:
+      cpu: 150m
+      memory: 128Mi
+  logLevel: "info"
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# Frontend configuration
+frontend:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: edgelink/frontend
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 80
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+  env:
+    apiUrl: "https://api.edgelink.example.com"
+    wsUrl: "wss://api.edgelink.example.com/ws"
+    appTitle: "EdgeLink Admin"
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+    fsGroup: 101
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    readOnlyRootFilesystem: true
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  imagePullSecrets: []
+
+# PostgreSQL configuration (using Bitnami chart)
+postgresql:
+  enabled: true
+  auth:
+    username: edgelink
+    password: edgelink_prod_password_change_me
+    database: edgelink
+  primary:
+    persistence:
+      enabled: true
+      size: 20Gi
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+      requests:
+        cpu: 500m
+        memory: 512Mi
+
+# Redis configuration (using Bitnami chart)
+redis:
+  enabled: true
+  auth:
+    enabled: false
+  master:
+    persistence:
+      enabled: true
+      size: 10Gi
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 250m
+        memory: 256Mi
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: edgelink.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+          backend: frontend
+        - path: /api
+          pathType: Prefix
+          backend: api-gateway
+        - path: /ws
+          pathType: Prefix
+          backend: api-gateway
+  tls:
+    - secretName: edgelink-tls
+      hosts:
+        - edgelink.example.com
+
+# Security settings
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+
+# Service Monitor for Prometheus (optional)
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+
+# Monitoring and Alerting Configuration
+monitoring:
+  # Prometheus Rules
+  prometheusRules:
+    enabled: true
+  
+  # Auto-Rollback Configuration
+  autoRollback:
+    enabled: true
+    # Dry run mode - set to false to enable actual rollbacks
+    dryRun: false
+    # Maximum number of rollback retry attempts
+    maxRetries: 3
+    # Rollback timeout in seconds
+    timeout: 300
+    # Webhook URL for notifications (Slack/Teams/etc)
+    webhookUrl: ""
+    # Resource limits for rollback webhook
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+      requests:
+        cpu: 50m
+        memory: 64Mi
+  
+  # Alert Thresholds
+  thresholds:
+    # Error rate threshold (0.05 = 5%)
+    errorRate: 0.05
+    # P95 latency threshold in seconds
+    p95Latency: 0.5
+    # Memory usage threshold (0.9 = 90%)
+    memoryUsage: 0.9
+    # CPU throttling threshold in seconds per second
+    cpuThrottling: 0.1
+  
+  # Alerting Integrations
+  alerting:
+    # Slack integration
+    slack:
+      enabled: false
+      webhookUrl: ""
+      channel: "#edgelink-alerts"
+    
+    # Email integration
+    email:
+      enabled: false
+      to: "ops@edgelink.com"
+      from: "alertmanager@edgelink.com"
+      smarthost: "smtp.gmail.com:587"
+      username: ""
+      password: ""
+    
+    # PagerDuty integration
+    pagerduty:
+      enabled: false
+      serviceKey: ""
+
+# Certificate Manager configuration
+certManager:
+  # 是否启用cert-manager证书管理
+  enabled: true
+
+  # 用于接收证书过期通知的邮箱
+  email: "admin@edgelink.com"
+
+  # 使用的Issuer（letsencrypt-prod, letsencrypt-staging, selfsigned）
+  issuer: "letsencrypt-prod"
+
+  # 证书有效期（默认90天）
+  duration: "2160h"  # 90 days
+
+  # 证书续期时间（在过期前15天开始续期）
+  renewBefore: "360h"  # 15 days
+
+  # 私钥配置
+  privateKey:
+    # 算法：RSA 或 ECDSA
+    algorithm: "RSA"
+    # RSA密钥大小（2048 或 4096）
+    size: 2048
+    # 轮换策略（Always 或 Never）
+    rotationPolicy: "Always"
+
+  # ACME 挑战解析器配置
+  solvers:
+    # HTTP-01 挑战（适用于大多数情况）
+    http01:
+      enabled: true
+      ingressClass: "nginx"
+      serviceType: "ClusterIP"
+
+    # DNS-01 挑战（适用于通配符证书）
+    dns01:
+      enabled: false
+      # DNS提供商：cloudflare, route53, google
+      provider: "cloudflare"
+
+      # Cloudflare 配置
+      cloudflare:
+        email: "admin@edgelink.com"
+        apiTokenSecretName: "cloudflare-api-token"
+
+      # AWS Route53 配置
+      route53:
+        region: "us-east-1"
+        accessKeyID: ""
+        secretName: "aws-route53-credentials"
+        # 可选：使用IAM角色
+        role: ""
+
+      # Google Cloud DNS 配置
+      google:
+        project: "my-project"
+        serviceAccountSecretName: "google-cloud-dns-sa"
+
+  # 自签名证书（用于开发/测试）
+  selfSigned:
+    enabled: true
+
+  # 通配符证书配置
+  wildcardCertificate:
+    enabled: false
+    domain: "edgelink.com"
+
+  # 额外的DNS名称
+  additionalDnsNames: []
+    # - "api.edgelink.com"
+    # - "admin.edgelink.com"
+

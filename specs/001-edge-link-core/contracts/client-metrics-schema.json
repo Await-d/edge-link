@@ -1,0 +1,313 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://edgelink.example.com/schemas/client-metrics-v1.json",
+  "title": "Edge-Link Client Metrics Schema",
+  "description": "JSON schema for device heartbeat and metrics reporting (POST /api/v1/device/{device_id}/metrics)",
+  "type": "object",
+  "required": ["nat_type", "sessions", "system_info"],
+  "properties": {
+    "nat_type": {
+      "type": "string",
+      "enum": [
+        "full_cone",
+        "restricted_cone",
+        "port_restricted_cone",
+        "symmetric",
+        "unknown"
+      ],
+      "description": "NAT type detected via STUN probing",
+      "examples": ["port_restricted_cone"]
+    },
+    "sessions": {
+      "type": "array",
+      "description": "Active WireGuard tunnel sessions with peer devices",
+      "items": {
+        "type": "object",
+        "required": [
+          "peer_device_id",
+          "connection_type",
+          "last_handshake_at"
+        ],
+        "properties": {
+          "peer_device_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "UUID of peer device",
+            "examples": ["550e8400-e29b-41d4-a716-446655440000"]
+          },
+          "connection_type": {
+            "type": "string",
+            "enum": ["p2p_direct", "turn_relay"],
+            "description": "Connection method used for tunnel"
+          },
+          "last_handshake_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp of most recent WireGuard handshake (RFC3339)",
+            "examples": ["2025-10-19T10:00:00Z"]
+          },
+          "bytes_sent": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Total bytes transmitted to peer since session start"
+          },
+          "bytes_received": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Total bytes received from peer since session start"
+          },
+          "latency_ms": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 60000,
+            "description": "Round-trip time (ICMP ping) in milliseconds"
+          },
+          "endpoint": {
+            "type": "string",
+            "pattern": "^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}:[0-9]+$",
+            "description": "Peer's public endpoint (IP:port)",
+            "examples": ["203.0.113.42:51820"]
+          },
+          "handshake_failures": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Count of failed handshake attempts since last success"
+          }
+        }
+      }
+    },
+    "system_info": {
+      "type": "object",
+      "description": "Device system information and resource usage",
+      "required": ["cpu_usage_percent", "memory_usage_mb", "uptime_seconds"],
+      "properties": {
+        "cpu_usage_percent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "CPU usage percentage (average over last 30s)"
+        },
+        "memory_usage_mb": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Memory consumption in megabytes"
+        },
+        "uptime_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Device uptime in seconds since last boot"
+        },
+        "wireguard_version": {
+          "type": "string",
+          "description": "WireGuard implementation version",
+          "examples": ["1.0.20210914", "wireguard-go-0.0.20220316"]
+        },
+        "platform_version": {
+          "type": "string",
+          "description": "OS/platform version",
+          "examples": ["Linux 5.15.0-157-generic", "Windows 10.0.19045", "iOS 17.5.1"]
+        }
+      }
+    },
+    "wireguard_stats": {
+      "type": "object",
+      "description": "WireGuard interface statistics",
+      "properties": {
+        "interface_name": {
+          "type": "string",
+          "description": "Name of WireGuard network interface",
+          "examples": ["wg0", "edgelink0"]
+        },
+        "listen_port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "UDP port WireGuard is listening on"
+        },
+        "total_peers": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of configured peers"
+        },
+        "active_peers": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of peers with recent handshake (< 3 minutes)"
+        },
+        "total_rx_bytes": {
+          "type": "integer",
+          "format": "int64",
+          "minimum": 0,
+          "description": "Total bytes received across all peers"
+        },
+        "total_tx_bytes": {
+          "type": "integer",
+          "format": "int64",
+          "minimum": 0,
+          "description": "Total bytes transmitted across all peers"
+        }
+      }
+    },
+    "network_info": {
+      "type": "object",
+      "description": "Network interface and connectivity information",
+      "properties": {
+        "local_ip": {
+          "type": "string",
+          "format": "ipv4",
+          "description": "Device's private IP address on local network",
+          "examples": ["192.168.1.100"]
+        },
+        "public_ip": {
+          "type": "string",
+          "format": "ipv4",
+          "description": "Device's public IP address (as seen by STUN server)",
+          "examples": ["203.0.113.42"]
+        },
+        "connection_type": {
+          "type": "string",
+          "enum": ["ethernet", "wifi", "cellular", "unknown"],
+          "description": "Type of network connection"
+        },
+        "signal_strength": {
+          "type": "integer",
+          "minimum": -100,
+          "maximum": 0,
+          "description": "WiFi/cellular signal strength in dBm (only for wireless)"
+        }
+      }
+    },
+    "diagnostics": {
+      "type": "object",
+      "description": "Optional diagnostic information (only sent when issues detected)",
+      "properties": {
+        "recent_errors": {
+          "type": "array",
+          "maxItems": 10,
+          "description": "Most recent error messages (last 10)",
+          "items": {
+            "type": "object",
+            "required": ["timestamp", "level", "message"],
+            "properties": {
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "level": {
+                "type": "string",
+                "enum": ["error", "warning"]
+              },
+              "message": {
+                "type": "string",
+                "maxLength": 500
+              },
+              "code": {
+                "type": "string",
+                "description": "Error code for categorization",
+                "examples": ["HANDSHAKE_TIMEOUT", "DNS_RESOLUTION_FAILED"]
+              }
+            }
+          }
+        },
+        "stun_probe_results": {
+          "type": "object",
+          "description": "Results from most recent STUN probing",
+          "properties": {
+            "probed_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "nat_type_detected": {
+              "type": "string",
+              "enum": ["full_cone", "restricted_cone", "port_restricted_cone", "symmetric"]
+            },
+            "public_endpoint": {
+              "type": "string",
+              "pattern": "^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}:[0-9]+$"
+            },
+            "response_time_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "STUN server response time"
+            }
+          }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Additional metadata for telemetry enrichment",
+      "properties": {
+        "client_version": {
+          "type": "string",
+          "description": "Edge-Link client version",
+          "examples": ["1.0.0", "1.2.3-beta"]
+        },
+        "config_version": {
+          "type": "integer",
+          "description": "Version number of device configuration (increments on updates)"
+        },
+        "reported_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when metrics were collected"
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "nat_type": "port_restricted_cone",
+      "sessions": [
+        {
+          "peer_device_id": "550e8400-e29b-41d4-a716-446655440000",
+          "connection_type": "p2p_direct",
+          "last_handshake_at": "2025-10-19T10:00:00Z",
+          "bytes_sent": 15728640,
+          "bytes_received": 31457280,
+          "latency_ms": 42,
+          "endpoint": "203.0.113.42:51820",
+          "handshake_failures": 0
+        },
+        {
+          "peer_device_id": "a1b2c3d4-e5f6-4a1b-8c9d-0e1f2a3b4c5d",
+          "connection_type": "turn_relay",
+          "last_handshake_at": "2025-10-19T09:59:45Z",
+          "bytes_sent": 2097152,
+          "bytes_received": 4194304,
+          "latency_ms": 125,
+          "endpoint": "turn1.edgelink.example.com:3478",
+          "handshake_failures": 2
+        }
+      ],
+      "system_info": {
+        "cpu_usage_percent": 5.2,
+        "memory_usage_mb": 128,
+        "uptime_seconds": 3456789,
+        "wireguard_version": "1.0.20210914",
+        "platform_version": "Linux 5.15.0-157-generic"
+      },
+      "wireguard_stats": {
+        "interface_name": "wg0",
+        "listen_port": 51820,
+        "total_peers": 12,
+        "active_peers": 11,
+        "total_rx_bytes": 125829120,
+        "total_tx_bytes": 62914560
+      },
+      "network_info": {
+        "local_ip": "192.168.1.100",
+        "public_ip": "203.0.113.42",
+        "connection_type": "wifi",
+        "signal_strength": -55
+      },
+      "metadata": {
+        "client_version": "1.0.0",
+        "config_version": 3,
+        "reported_at": "2025-10-19T10:00:05Z"
+      }
+    }
+  ]
+}

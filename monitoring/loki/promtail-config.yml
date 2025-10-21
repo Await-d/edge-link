@@ -1,0 +1,307 @@
+# Promtail Configuration for EdgeLink
+# Collects logs from EdgeLink services and forwards to Loki
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: info
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+    backoff_config:
+      min_period: 500ms
+      max_period: 5m
+      max_retries: 10
+    # Batch configuration for better performance
+    batchsize: 1048576  # 1MB
+    batchwait: 1s
+    timeout: 10s
+
+scrape_configs:
+  # API Gateway logs
+  - job_name: api-gateway
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: api-gateway
+          component: control-plane
+          __path__: /var/log/edgelink/api-gateway/*.log
+
+    # Kubernetes pod discovery
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - edgelink-system
+    relabel_configs:
+      # Only scrape api-gateway pods
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
+        regex: api-gateway
+        action: keep
+      # Add pod metadata
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_node_name]
+        target_label: node
+      # Set log path
+      - source_labels: [__meta_kubernetes_pod_uid, __meta_kubernetes_pod_container_name]
+        target_label: __path__
+        separator: /
+        replacement: /var/log/pods/*$1/*/*.log
+
+    # Pipeline to parse JSON logs
+    pipeline_stages:
+      - json:
+          expressions:
+            timestamp: timestamp
+            level: level
+            message: message
+            trace_id: trace_id
+            span_id: span_id
+      - timestamp:
+          source: timestamp
+          format: RFC3339
+      - labels:
+          level:
+          trace_id:
+      - output:
+          source: message
+
+  # Device Service logs
+  - job_name: device-service
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - edgelink-system
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
+        regex: device-service
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_uid, __meta_kubernetes_pod_container_name]
+        target_label: __path__
+        separator: /
+        replacement: /var/log/pods/*$1/*/*.log
+    pipeline_stages:
+      - json:
+          expressions:
+            timestamp: timestamp
+            level: level
+            message: message
+            device_id: device_id
+      - timestamp:
+          source: timestamp
+          format: RFC3339
+      - labels:
+          level:
+          device_id:
+      - output:
+          source: message
+
+  # Topology Service logs
+  - job_name: topology-service
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - edgelink-system
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
+        regex: topology-service
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_uid, __meta_kubernetes_pod_container_name]
+        target_label: __path__
+        separator: /
+        replacement: /var/log/pods/*$1/*/*.log
+    pipeline_stages:
+      - json:
+          expressions:
+            timestamp: timestamp
+            level: level
+            message: message
+      - timestamp:
+          source: timestamp
+          format: RFC3339
+      - labels:
+          level:
+      - output:
+          source: message
+
+  # NAT Coordinator logs
+  - job_name: nat-coordinator
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - edgelink-system
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
+        regex: nat-coordinator
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_uid, __meta_kubernetes_pod_container_name]
+        target_label: __path__
+        separator: /
+        replacement: /var/log/pods/*$1/*/*.log
+    pipeline_stages:
+      - json:
+          expressions:
+            timestamp: timestamp
+            level: level
+            message: message
+            nat_type: nat_type
+      - timestamp:
+          source: timestamp
+          format: RFC3339
+      - labels:
+          level:
+          nat_type:
+      - output:
+          source: message
+
+  # Alert Service logs
+  - job_name: alert-service
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - edgelink-system
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
+        regex: alert-service
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_uid, __meta_kubernetes_pod_container_name]
+        target_label: __path__
+        separator: /
+        replacement: /var/log/pods/*$1/*/*.log
+    pipeline_stages:
+      - json:
+          expressions:
+            timestamp: timestamp
+            level: level
+            message: message
+            alert_id: alert_id
+            severity: severity
+      - timestamp:
+          source: timestamp
+          format: RFC3339
+      - labels:
+          level:
+          severity:
+      - output:
+          source: message
+
+  # Background Worker logs
+  - job_name: background-worker
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - edgelink-system
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
+        regex: background-worker
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_uid, __meta_kubernetes_pod_container_name]
+        target_label: __path__
+        separator: /
+        replacement: /var/log/pods/*$1/*/*.log
+    pipeline_stages:
+      - json:
+          expressions:
+            timestamp: timestamp
+            level: level
+            message: message
+            task_name: task_name
+      - timestamp:
+          source: timestamp
+          format: RFC3339
+      - labels:
+          level:
+          task_name:
+      - output:
+          source: message
+
+  # PostgreSQL logs
+  - job_name: postgres
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: postgres
+          component: database
+          __path__: /var/log/postgresql/*.log
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) (?P<level>\w+):\s+(?P<message>.*)'
+      - timestamp:
+          source: timestamp
+          format: '2006-01-02 15:04:05.000'
+      - labels:
+          level:
+      - output:
+          source: message
+
+  # Redis logs
+  - job_name: redis
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: redis
+          component: cache
+          __path__: /var/log/redis/*.log
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<pid>\d+):(?P<role>\w) (?P<timestamp>\d{2} \w{3} \d{4} \d{2}:\d{2}:\d{2}\.\d{3}) (?P<level>[*#.-]) (?P<message>.*)'
+      - labels:
+          level:
+      - output:
+          source: message
+
+  # System logs (syslog)
+  - job_name: syslog
+    syslog:
+      listen_address: 0.0.0.0:1514
+      labels:
+        job: syslog
+    relabel_configs:
+      - source_labels: [__syslog_message_hostname]
+        target_label: host
+    pipeline_stages:
+      - labels:
+          level: __syslog_message_severity
+      - timestamp:
+          source: __syslog_message_timestamp
+          format: RFC3339
+
+# Limits
+limits_config:
+  readline_rate_enabled: true
+  readline_rate: 1000
+  readline_rate_burst: 5000

@@ -1,0 +1,42 @@
+name: Sync Base Images to Private Registry
+
+on:
+  schedule:
+    - cron: '0 2 * * 0'  # 每周日凌晨2点
+  workflow_dispatch:
+
+env:
+  HARBOR_URL: ${{ secrets.HARBOR_URL || 'harbor.edgelink.com' }}
+  HARBOR_PROJECT: library
+
+jobs:
+  sync-images:
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 3
+      matrix:
+        include:
+          - source: golang:1.21-alpine
+            target: golang:1.21-alpine
+          - source: alpine:3.18
+            target: alpine:3.18
+          - source: node:20-alpine
+            target: node:20-alpine
+          - source: postgres:15-alpine
+            target: postgres:15-alpine
+          - source: redis:7-alpine
+            target: redis:7-alpine
+
+    steps:
+      - name: Login to Harbor
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.HARBOR_URL }}
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
+      
+      - name: Pull and push image
+        run: |
+          docker pull ${{ matrix.source }}
+          docker tag ${{ matrix.source }} ${{ env.HARBOR_URL }}/${{ env.HARBOR_PROJECT }}/${{ matrix.target }}
+          docker push ${{ env.HARBOR_URL }}/${{ env.HARBOR_PROJECT }}/${{ matrix.target }}

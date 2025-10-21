@@ -1,0 +1,17 @@
+apiVersion: v2
+name: edgelink-sidecar
+description: EdgeLink Sidecar DaemonSet for Kubernetes node-to-node VPN connectivity
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - wireguard
+  - vpn
+  - networking
+  - p2p
+home: https://github.com/edgelink/edge-link
+sources:
+  - https://github.com/edgelink/edge-link
+maintainers:
+  - name: EdgeLink Team
+    email: support@edgelink.com

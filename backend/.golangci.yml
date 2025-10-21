@@ -1,0 +1,89 @@
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - errcheck        # 检查未处理的错误
+    - gosimple        # 简化代码
+    - govet           # Go官方工具
+    - ineffassign     # 检测无效赋值
+    - staticcheck     # 静态分析
+    - typecheck       # 类型检查
+    - unused          # 检测未使用的代码
+    - gofmt           # 格式化检查
+    - goimports       # import排序
+    - revive          # 快速的linter
+    - gosec           # 安全检查
+    - misspell        # 拼写检查
+    - unconvert       # 不必要的类型转换
+    - unparam         # 未使用的函数参数
+    - goconst         # 重复字符串常量检测
+    - gocritic        # 代码质量检查
+    - gocyclo         # 圈复杂度检查
+    - bodyclose       # HTTP response body未关闭检查
+    - noctx           # 检查未使用context的HTTP请求
+    - sqlclosecheck   # SQL rows/stmt未关闭检查
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+  govet:
+    check-shadowing: true
+    enable-all: true
+
+  gocyclo:
+    min-complexity: 15
+
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+
+  misspell:
+    locale: US
+
+  revive:
+    severity: warning
+    rules:
+      - name: exported
+        severity: warning
+        disabled: false
+      - name: unexported-return
+        disabled: false
+      - name: indent-error-flow
+        disabled: false
+      - name: blank-imports
+        disabled: false
+      - name: context-as-argument
+        disabled: false
+      - name: error-return
+        disabled: false
+      - name: error-strings
+        disabled: false
+      - name: error-naming
+        disabled: false
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+  exclude-rules:
+    # 排除测试文件的某些规则
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - gosec
+
+    # 排除generated代码
+    - path: \.pb\.go$
+      linters:
+        - all
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true

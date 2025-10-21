@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "edge-link.fullname" . }}-alert-service
+  labels:
+    {{- include "edge-link.labels" . | nindent 4 }}
+    app.kubernetes.io/component: alert-service
+spec:
+  replicas: {{ .Values.alertService.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "edge-link.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: alert-service
+  template:
+    metadata:
+      labels:
+        {{- include "edge-link.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: alert-service
+    spec:
+      serviceAccountName: {{ include "edge-link.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.alertService.podSecurityContext | nindent 8 }}
+      containers:
+      - name: alert-service
+        securityContext:
+          {{- toYaml .Values.alertService.securityContext | nindent 12 }}
+        image: "{{ .Values.alertService.image.repository }}:{{ .Values.alertService.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.alertService.image.pullPolicy }}
+        env:
+        - name: DB_HOST
+          value: {{ .Values.postgresql.host | quote }}
+        - name: DB_PORT
+          value: {{ .Values.postgresql.port | quote }}
+        - name: DB_NAME
+          value: {{ .Values.postgresql.database | quote }}
+        - name: DB_USER
+          value: {{ .Values.postgresql.username | quote }}
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.postgresql.existingSecret | default (include "edge-link.fullname" .) }}
+              key: postgresql-password
+        - name: REDIS_HOST
+          value: {{ .Values.redis.host | quote }}
+        - name: REDIS_PORT
+          value: {{ .Values.redis.port | quote }}
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.redis.existingSecret | default (include "edge-link.fullname" .) }}
+              key: redis-password
+        - name: LOG_LEVEL
+          value: {{ .Values.alertService.logLevel | quote }}
+        - name: SMTP_HOST
+          value: {{ .Values.alertService.smtp.host | quote }}
+        - name: SMTP_PORT
+          value: {{ .Values.alertService.smtp.port | quote }}
+        - name: SMTP_USER
+          value: {{ .Values.alertService.smtp.user | quote }}
+        - name: SMTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.alertService.smtp.existingSecret | default (include "edge-link.fullname" .) }}
+              key: smtp-password
+              optional: true
+        resources:
+          {{- toYaml .Values.alertService.resources | nindent 12 }}
+      {{- with .Values.alertService.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.alertService.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.alertService.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,721 @@
+openapi: 3.1.0
+info:
+  title: Edge-Link Control Plane API
+  version: 1.0.0
+  description: |
+    REST API for Edge-Link control plane services.
+    Handles device registration, configuration, status updates, and administrative operations.
+
+    **Authentication**:
+    - Device endpoints: Pre-shared key (registration) + Ed25519 signature (ongoing)
+    - Admin endpoints: OIDC/SAML (Bearer token)
+
+    **Base URL**: `https://api.edgelink.example.com/api/v1`
+  contact:
+    name: Edge-Link Team
+    email: support@edgelink.example.com
+
+servers:
+  - url: https://api.edgelink.example.com/api/v1
+    description: Production
+  - url: https://staging-api.edgelink.example.com/api/v1
+    description: Staging
+  - url: http://localhost:8080/api/v1
+    description: Local development
+
+tags:
+  - name: Device
+    description: Device registration, configuration, lifecycle management
+  - name: Metrics
+    description: Device heartbeat and metrics reporting
+  - name: Topology
+    description: Virtual network and peer configuration
+  - name: Admin
+    description: Administrative operations (UI)
+  - name: Alerts
+    description: Alert management
+  - name: Audit
+    description: Audit log queries
+
+paths:
+  # ========================================
+  # Device Endpoints
+  # ========================================
+  /device/register:
+    post:
+      tags: [Device]
+      summary: Register new device
+      description: |
+        Initial device registration using pre-shared key.
+        Generates device ID, allocates virtual IP, returns peer configuration.
+      operationId: registerDevice
+      security:
+        - PreSharedKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [public_key, platform, device_name, organization_slug]
+              properties:
+                public_key:
+                  type: string
+                  format: base64
+                  description: Ed25519 public key (32 bytes, base64-encoded)
+                  example: "iOXmYecfSSiNzWovSVF+x0q1aMt8AJ6kKIDNDmPpKlo="
+                platform:
+                  type: string
+                  enum: [desktop_linux, desktop_windows, desktop_macos, mobile_ios, mobile_android, iot, container]
+                  example: desktop_linux
+                device_name:
+                  type: string
+                  maxLength: 255
+                  example: "John's Laptop"
+                organization_slug:
+                  type: string
+                  pattern: '^[a-z0-9-]+$'
+                  example: "acme-corp"
+                virtual_network_id:
+                  type: string
+                  format: uuid
+                  description: Target virtual network (must belong to organization)
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '201':
+          description: Device registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceRegistrationResponse'
+        '400':
+          description: Invalid request (malformed public key, invalid platform)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid pre-shared key
+        '409':
+          description: Public key already registered
+        '429':
+          description: Rate limit exceeded (max 10 registrations per minute per PSK)
+
+  /device/{device_id}/config:
+    get:
+      tags: [Device]
+      summary: Get device configuration
+      description: |
+        Fetch current configuration (virtual IP, peer list, STUN/TURN servers).
+        Used during client startup or after reconnection.
+      operationId: getDeviceConfig
+      security:
+        - DeviceSignature: []
+      parameters:
+        - name: device_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Configuration retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceConfig'
+        '404':
+          description: Device not found
+
+  /device/{device_id}:
+    delete:
+      tags: [Device]
+      summary: Revoke device
+      description: |
+        Admin-initiated device revocation. Blacklists public key, terminates active sessions.
+      operationId: revokeDevice
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: device_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Device revoked
+        '403':
+          description: Insufficient permissions
+        '404':
+          description: Device not found
+
+  # ========================================
+  # Metrics Endpoints
+  # ========================================
+  /device/{device_id}/metrics:
+    post:
+      tags: [Metrics]
+      summary: Report device metrics
+      description: |
+        Periodic heartbeat and metrics push from client (every 30s default).
+        Updates last_seen_at, online status, NAT type, session metrics.
+      operationId: reportMetrics
+      security:
+        - DeviceSignature: []
+      parameters:
+        - name: device_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceMetrics'
+      responses:
+        '202':
+          description: Metrics accepted
+        '400':
+          description: Invalid metrics format
+
+  # ========================================
+  # Topology Endpoints
+  # ========================================
+  /virtual-networks:
+    get:
+      tags: [Topology]
+      summary: List virtual networks
+      description: Admin endpoint to list all virtual networks in organization
+      operationId: listVirtualNetworks
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: organization_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Virtual networks retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  virtual_networks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VirtualNetwork'
+
+    post:
+      tags: [Topology]
+      summary: Create virtual network
+      description: Admin endpoint to create new virtual network (subnet)
+      operationId: createVirtualNetwork
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [organization_id, name, cidr]
+              properties:
+                organization_id:
+                  type: string
+                  format: uuid
+                name:
+                  type: string
+                  example: "Engineering VPN"
+                cidr:
+                  type: string
+                  format: cidr
+                  example: "10.100.0.0/16"
+                gateway_ip:
+                  type: string
+                  format: ipv4
+                  example: "10.100.0.1"
+                dns_servers:
+                  type: array
+                  items:
+                    type: string
+                    format: ipv4
+                  example: ["8.8.8.8", "8.8.4.4"]
+      responses:
+        '201':
+          description: Virtual network created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VirtualNetwork'
+        '409':
+          description: CIDR overlaps with existing network
+
+  /devices:
+    get:
+      tags: [Admin]
+      summary: List devices
+      description: Admin endpoint with filtering and pagination
+      operationId: listDevices
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: virtual_network_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: online
+          in: query
+          schema:
+            type: boolean
+        - name: platform
+          in: query
+          schema:
+            type: string
+            enum: [desktop_linux, desktop_windows, desktop_macos, mobile_ios, mobile_android, iot, container]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Devices retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  devices:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Device'
+                  total:
+                    type: integer
+                    example: 247
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+
+  # ========================================
+  # Alert Endpoints
+  # ========================================
+  /alerts:
+    get:
+      tags: [Alerts]
+      summary: List alerts
+      description: Query alerts with filtering
+      operationId: listAlerts
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, acknowledged, resolved]
+        - name: severity
+          in: query
+          schema:
+            type: string
+            enum: [critical, high, medium, low]
+        - name: device_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: start_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: end_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Alerts retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  alerts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Alert'
+
+  /alerts/{alert_id}/acknowledge:
+    post:
+      tags: [Alerts]
+      summary: Acknowledge alert
+      operationId: acknowledgeAlert
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: alert_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Alert acknowledged
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Alert'
+
+  # ========================================
+  # Audit Endpoints
+  # ========================================
+  /audit-logs:
+    get:
+      tags: [Audit]
+      summary: Query audit logs
+      description: Fetch audit trail with filtering
+      operationId: queryAuditLogs
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: organization_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: resource_type
+          in: query
+          schema:
+            type: string
+            enum: [device, virtual_network, pre_shared_key, alert]
+        - name: resource_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: action
+          in: query
+          schema:
+            type: string
+        - name: start_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: end_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Audit logs retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  logs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditLog'
+
+# ========================================
+# Components
+# ========================================
+components:
+  securitySchemes:
+    PreSharedKey:
+      type: apiKey
+      in: header
+      name: X-PreShared-Key
+      description: HMAC-SHA256 of pre-shared key for device registration
+
+    DeviceSignature:
+      type: apiKey
+      in: header
+      name: X-Device-Signature
+      description: Ed25519 signature of request body + timestamp
+
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: OIDC/SAML access token for admin operations
+
+  schemas:
+    DeviceRegistrationResponse:
+      type: object
+      properties:
+        device_id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        virtual_ip:
+          type: string
+          format: ipv4
+          example: "10.100.1.42"
+        virtual_network:
+          $ref: '#/components/schemas/VirtualNetwork'
+        peers:
+          type: array
+          items:
+            $ref: '#/components/schemas/PeerConfig'
+        stun_servers:
+          type: array
+          items:
+            type: string
+          example: ["stun1.edgelink.example.com:3478"]
+        turn_servers:
+          type: array
+          items:
+            type: object
+            properties:
+              url:
+                type: string
+                example: "turn1.edgelink.example.com:3478"
+              username:
+                type: string
+              credential:
+                type: string
+
+    DeviceConfig:
+      type: object
+      properties:
+        device_id:
+          type: string
+          format: uuid
+        virtual_ip:
+          type: string
+          format: ipv4
+        virtual_network:
+          $ref: '#/components/schemas/VirtualNetwork'
+        peers:
+          type: array
+          items:
+            $ref: '#/components/schemas/PeerConfig'
+        stun_servers:
+          type: array
+          items:
+            type: string
+        turn_servers:
+          type: array
+          items:
+            type: object
+
+    DeviceMetrics:
+      type: object
+      required: [nat_type, sessions]
+      properties:
+        nat_type:
+          type: string
+          enum: [full_cone, restricted_cone, port_restricted_cone, symmetric, unknown]
+          example: port_restricted_cone
+        sessions:
+          type: array
+          items:
+            type: object
+            required: [peer_device_id, connection_type, last_handshake_at]
+            properties:
+              peer_device_id:
+                type: string
+                format: uuid
+              connection_type:
+                type: string
+                enum: [p2p_direct, turn_relay]
+              last_handshake_at:
+                type: string
+                format: date-time
+              bytes_sent:
+                type: integer
+                format: int64
+              bytes_received:
+                type: integer
+                format: int64
+              latency_ms:
+                type: integer
+                minimum: 0
+
+    Device:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        virtual_network_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        virtual_ip:
+          type: string
+          format: ipv4
+        public_key:
+          type: string
+          format: base64
+        platform:
+          type: string
+          enum: [desktop_linux, desktop_windows, desktop_macos, mobile_ios, mobile_android, iot, container]
+        nat_type:
+          type: string
+          enum: [full_cone, restricted_cone, port_restricted_cone, symmetric, unknown]
+        online:
+          type: boolean
+        last_seen_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    VirtualNetwork:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        cidr:
+          type: string
+          format: cidr
+        gateway_ip:
+          type: string
+          format: ipv4
+        dns_servers:
+          type: array
+          items:
+            type: string
+            format: ipv4
+        created_at:
+          type: string
+          format: date-time
+
+    PeerConfig:
+      type: object
+      properties:
+        device_id:
+          type: string
+          format: uuid
+        public_key:
+          type: string
+          format: base64
+        virtual_ip:
+          type: string
+          format: ipv4
+        allowed_ips:
+          type: array
+          items:
+            type: string
+            format: cidr
+        persistent_keepalive:
+          type: integer
+          example: 25
+
+    Alert:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        device_id:
+          type: string
+          format: uuid
+          nullable: true
+        severity:
+          type: string
+          enum: [critical, high, medium, low]
+        type:
+          type: string
+          enum: [device_offline, high_latency, failed_auth, key_expiration, tunnel_failure]
+        message:
+          type: string
+        metadata:
+          type: object
+        status:
+          type: string
+          enum: [active, acknowledged, resolved]
+        created_at:
+          type: string
+          format: date-time
+        acknowledged_at:
+          type: string
+          format: date-time
+          nullable: true
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+          format: uuid
+        actor_id:
+          type: string
+          format: uuid
+          nullable: true
+        action:
+          type: string
+        resource_type:
+          type: string
+        resource_id:
+          type: string
+          format: uuid
+        before_state:
+          type: object
+          nullable: true
+        after_state:
+          type: object
+          nullable: true
+        ip_address:
+          type: string
+          format: ipv4
+          nullable: true
+        user_agent:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "invalid_request"
+        message:
+          type: string
+          example: "Public key must be 32 bytes base64-encoded"
+        details:
+          type: object

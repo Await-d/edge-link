@@ -1,0 +1,11 @@
+DROP TRIGGER IF EXISTS prevent_audit_log_update ON audit_logs;
+DROP TRIGGER IF EXISTS prevent_audit_log_delete ON audit_logs;
+DROP FUNCTION IF EXISTS prevent_audit_log_modification();
+DROP INDEX IF EXISTS idx_audit_logs_organization_id;
+DROP INDEX IF EXISTS idx_audit_logs_resource_type;
+DROP INDEX IF EXISTS idx_audit_logs_resource_id;
+DROP INDEX IF EXISTS idx_audit_logs_created_at;
+DROP INDEX IF EXISTS idx_audit_logs_actor_id;
+DROP INDEX IF EXISTS idx_audit_logs_action;
+DROP TABLE IF EXISTS audit_logs;
+DROP TYPE IF EXISTS resource_type_enum;
