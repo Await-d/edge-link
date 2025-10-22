@@ -112,3 +112,65 @@ export interface DeviceMetrics {
   network_rx_bytes: number
   latency_ms?: number
 }
+
+// 设备详情扩展
+export interface DeviceDetail extends Device {
+  virtual_network_name?: string
+  tags?: string[]
+  connection_mode?: 'direct' | 'relay'
+  public_ip?: string
+  listen_port?: number
+  current_upload?: number
+  current_download?: number
+}
+
+// 对等设备信息
+export interface DevicePeer {
+  id: string
+  peer_name: string
+  peer_ip: string
+  status: 'connected' | 'disconnected'
+  latency?: number
+  packet_loss?: number
+  last_handshake?: string
+  bytes_sent: number
+  bytes_received: number
+}
+
+// 设备指标历史数据
+export interface DeviceMetricsHistory {
+  timestamps: string[]
+  inbound_bandwidth: number[]
+  outbound_bandwidth: number[]
+  avg_latency: number[]
+}
+
+// 设备趋势数据
+export interface DeviceTrendPoint {
+  timestamp: string
+  total_devices: number
+  online_devices: number
+}
+
+// 流量数据
+export interface TrafficPoint {
+  timestamp: string
+  inbound: number // MB/s
+  outbound: number // MB/s
+}
+
+// 设备分布数据
+export interface PlatformDistribution {
+  platform: string
+  count: number
+  percentage: number
+}
+
+// 告警趋势数据
+export interface AlertTrendPoint {
+  date: string
+  critical: number
+  high: number
+  medium: number
+  low: number
+}

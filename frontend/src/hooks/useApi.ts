@@ -1,12 +1,37 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { deviceApi, networkApi, alertApi, auditApi } from '@/services/api'
+import { deviceApi, networkApi, alertApi, auditApi, statsApi, topologyApi } from '@/services/api'
 import { message } from 'antd'
+import { transformToTopology } from '@/utils/topology'
 
 // 设备相关hooks
 export const useDevices = (params?: Parameters<typeof deviceApi.getDevices>[0]) => {
   return useQuery({
     queryKey: ['devices', params],
     queryFn: () => deviceApi.getDevices(params),
+  })
+}
+
+export const useDevice = (deviceId: string) => {
+  return useQuery({
+    queryKey: ['device', deviceId],
+    queryFn: () => deviceApi.getDeviceById(deviceId),
+    enabled: !!deviceId,
+  })
+}
+
+export const useDevicePeers = (deviceId: string) => {
+  return useQuery({
+    queryKey: ['device-peers', deviceId],
+    queryFn: () => deviceApi.getDevicePeers(deviceId),
+    enabled: !!deviceId,
+  })
+}
+
+export const useDeviceMetrics = (deviceId: string, timeRange: string = '24h') => {
+  return useQuery({
+    queryKey: ['device-metrics', deviceId, timeRange],
+    queryFn: () => deviceApi.getDeviceMetrics(deviceId, timeRange),
+    enabled: !!deviceId,
   })
 }
 
@@ -21,6 +46,21 @@ export const useDeleteDevice = () => {
     },
     onError: (error: any) => {
       message.error(error.response?.data?.message || '设备删除失败')
+    },
+  })
+}
+
+export const useRestartDevice = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: deviceApi.restartDevice,
+    onSuccess: (_, deviceId) => {
+      queryClient.invalidateQueries({ queryKey: ['device', deviceId] })
+      message.success('设备重启指令已发送')
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.message || '设备重启失败')
     },
   })
 }
@@ -101,5 +141,73 @@ export const useAuditLogs = (params?: Parameters<typeof auditApi.getAuditLogs>[0
   return useQuery({
     queryKey: ['audit-logs', params],
     queryFn: () => auditApi.getAuditLogs(params),
+  })
+}
+
+// 统计数据相关hooks
+export const useDashboardStats = () => {
+  return useQuery({
+    queryKey: ['dashboard-stats'],
+    queryFn: () => statsApi.getDashboardStats(),
+    refetchInterval: 30000, // 每30秒刷新
+    refetchIntervalInBackground: true,
+  })
+}
+
+export const useDeviceTrend = (timeRange: string = '24h') => {
+  return useQuery({
+    queryKey: ['device-trend', timeRange],
+    queryFn: () => statsApi.getDeviceTrend(timeRange),
+    refetchInterval: 30000,
+    refetchIntervalInBackground: true,
+  })
+}
+
+export const useTrafficStats = (timeRange: string = '24h') => {
+  return useQuery({
+    queryKey: ['traffic-stats', timeRange],
+    queryFn: () => statsApi.getTrafficStats(timeRange),
+    refetchInterval: 30000,
+    refetchIntervalInBackground: true,
+  })
+}
+
+export const usePlatformDistribution = () => {
+  return useQuery({
+    queryKey: ['platform-distribution'],
+    queryFn: () => statsApi.getPlatformDistribution(),
+    refetchInterval: 30000,
+    refetchIntervalInBackground: true,
+  })
+}
+
+export const useAlertTrend = (timeRange: string = '7d') => {
+  return useQuery({
+    queryKey: ['alert-trend', timeRange],
+    queryFn: () => statsApi.getAlertTrend(timeRange),
+    refetchInterval: 30000,
+    refetchIntervalInBackground: true,
+  })
+}
+
+// 拓扑相关hooks
+export const useTopologyData = () => {
+  return useQuery({
+    queryKey: ['topology'],
+    queryFn: async () => {
+      // 并行获取设备和对等配置数据
+      const [devicesResponse, peersResponse] = await Promise.all([
+        topologyApi.getAllDevices(),
+        topologyApi.getAllPeerConfigurations(),
+      ])
+
+      // 转换为拓扑格式
+      const devices = Array.isArray(devicesResponse)
+        ? devicesResponse
+        : devicesResponse.data || []
+      return transformToTopology(devices, peersResponse.peers || [])
+    },
+    refetchInterval: 10000, // 每10秒刷新
+    refetchIntervalInBackground: true,
   })
 }

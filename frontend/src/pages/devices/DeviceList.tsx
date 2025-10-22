@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Table,
   Card,
@@ -10,7 +11,12 @@ import {
   Input,
   Select,
 } from 'antd'
-import { DeleteOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons'
+import {
+  DeleteOutlined,
+  ReloadOutlined,
+  SearchOutlined,
+  EyeOutlined,
+} from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { useDevices, useDeleteDevice } from '@/hooks/useApi'
 import type { Device } from '@/types/api'
@@ -20,6 +26,7 @@ const { Title } = Typography
 const { Search } = Input
 
 const DeviceList: React.FC = () => {
+  const navigate = useNavigate()
   const [searchText, setSearchText] = useState('')
   const [platformFilter, setPlatformFilter] = useState<string>()
   const [onlineFilter, setOnlineFilter] = useState<boolean>()
@@ -89,6 +96,13 @@ const DeviceList: React.FC = () => {
       key: 'action',
       render: (_, record) => (
         <Space size="middle">
+          <Button
+            type="link"
+            icon={<EyeOutlined />}
+            onClick={() => navigate(`/devices/${record.id}`)}
+          >
+            查看详情
+          </Button>
           <Popconfirm
             title="确定删除此设备?"
             description="删除后将无法恢复"

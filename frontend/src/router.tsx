@@ -3,6 +3,7 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import MainLayout from '@/components/layout/MainLayout'
 import Dashboard from '@/pages/dashboard/Dashboard'
 import DeviceList from '@/pages/devices/DeviceList'
+import DeviceDetail from '@/pages/devices/DeviceDetail'
 import AlertList from '@/pages/alerts/AlertList'
 import AuditLogList from '@/pages/audit/AuditLogList'
 import Topology from '@/pages/topology/Topology'
@@ -20,6 +21,10 @@ const router = createBrowserRouter([
       {
         path: 'devices',
         element: <DeviceList />,
+      },
+      {
+        path: 'devices/:deviceId',
+        element: <DeviceDetail />,
       },
       {
         path: 'alerts',
