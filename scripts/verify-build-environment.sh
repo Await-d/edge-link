@@ -192,6 +192,35 @@ check_node_version() {
     return $issues
 }
 
+# Extract ARG values from Dockerfile
+extract_arg_value() {
+    local dockerfile="$1"
+    local arg_name="$2"
+
+    grep "^ARG ${arg_name}=" "$dockerfile" | head -1 | cut -d'=' -f2 | tr -d '"'
+}
+
+# Expand variables in image string
+expand_image_vars() {
+    local image="$1"
+    local dockerfile="$2"
+
+    # Find all ${VAR} patterns
+    while [[ $image =~ \$\{([A-Z_]+)\} ]]; do
+        local var_name="${BASH_REMATCH[1]}"
+        local var_value=$(extract_arg_value "$dockerfile" "$var_name")
+
+        if [ -z "$var_value" ]; then
+            # If not found, keep original
+            break
+        fi
+
+        image="${image//\$\{${var_name}\}/${var_value}}"
+    done
+
+    echo "$image"
+}
+
 # Check Docker base images
 check_base_images() {
     echo ""
@@ -210,12 +239,25 @@ check_base_images() {
                 continue
             fi
 
+            # Extract image reference
+            local image=$(echo "$line" | awk '{print $2}')
+
             # Check for digest pinning
             if echo "$line" | grep -q "sha256:"; then
-                local image=$(echo "$line" | awk '{print $2}' | cut -d'@' -f1)
-                print_check "ok" "$(basename $dockerfile): $image (digest pinned)"
+                local image_display=$(echo "$image" | cut -d'@' -f1)
+
+                # Expand ARG variables for display
+                if [[ $image_display =~ \$\{ ]]; then
+                    image_display=$(expand_image_vars "$image_display" "$dockerfile")
+                fi
+
+                print_check "ok" "$(basename $dockerfile): $image_display (digest pinned)"
             else
-                local image=$(echo "$line" | awk '{print $2}')
+                # Expand ARG variables before checking
+                if [[ $image =~ \$\{ ]]; then
+                    image=$(expand_image_vars "$image" "$dockerfile")
+                fi
+
                 if [[ "$image" =~ :latest$ ]] || [[ ! "$image" =~ : ]]; then
                     print_check "error" "$(basename $dockerfile): $image (using 'latest' or no tag)"
                     ((issues++))

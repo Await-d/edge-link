@@ -1,23 +1,23 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "edge-link.fullname" . }}-alert-service
+  name: {{ include "edge-link-control-plane.fullname" . }}-alert-service
   labels:
-    {{- include "edge-link.labels" . | nindent 4 }}
+    {{- include "edge-link-control-plane.labels" . | nindent 4 }}
     app.kubernetes.io/component: alert-service
 spec:
   replicas: {{ .Values.alertService.replicaCount }}
   selector:
     matchLabels:
-      {{- include "edge-link.selectorLabels" . | nindent 6 }}
+      {{- include "edge-link-control-plane.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: alert-service
   template:
     metadata:
       labels:
-        {{- include "edge-link.selectorLabels" . | nindent 8 }}
+        {{- include "edge-link-control-plane.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: alert-service
     spec:
-      serviceAccountName: {{ include "edge-link.serviceAccountName" . }}
+      serviceAccountName: {{ include "edge-link-control-plane.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.alertService.podSecurityContext | nindent 8 }}
       containers:
@@ -26,6 +26,40 @@ spec:
           {{- toYaml .Values.alertService.securityContext | nindent 12 }}
         image: "{{ .Values.alertService.image.repository }}:{{ .Values.alertService.image.tag | default .Chart.AppVersion }}"
         imagePullPolicy: {{ .Values.alertService.image.pullPolicy }}
+        ports:
+          - name: http
+            containerPort: {{ .Values.alertService.service.port }}
+            protocol: TCP
+        {{- if .Values.alertService.healthProbes.liveness.enabled }}
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.alertService.healthProbes.liveness.path }}
+            port: http
+          initialDelaySeconds: {{ .Values.alertService.healthProbes.liveness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.alertService.healthProbes.liveness.periodSeconds }}
+          timeoutSeconds: {{ .Values.alertService.healthProbes.liveness.timeoutSeconds }}
+          failureThreshold: {{ .Values.alertService.healthProbes.liveness.failureThreshold }}
+        {{- end }}
+        {{- if .Values.alertService.healthProbes.readiness.enabled }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.alertService.healthProbes.readiness.path }}
+            port: http
+          initialDelaySeconds: {{ .Values.alertService.healthProbes.readiness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.alertService.healthProbes.readiness.periodSeconds }}
+          timeoutSeconds: {{ .Values.alertService.healthProbes.readiness.timeoutSeconds }}
+          failureThreshold: {{ .Values.alertService.healthProbes.readiness.failureThreshold }}
+        {{- end }}
+        {{- if .Values.alertService.healthProbes.startup.enabled }}
+        startupProbe:
+          httpGet:
+            path: {{ .Values.alertService.healthProbes.startup.path }}
+            port: http
+          initialDelaySeconds: {{ .Values.alertService.healthProbes.startup.initialDelaySeconds }}
+          periodSeconds: {{ .Values.alertService.healthProbes.startup.periodSeconds }}
+          timeoutSeconds: {{ .Values.alertService.healthProbes.startup.timeoutSeconds }}
+          failureThreshold: {{ .Values.alertService.healthProbes.startup.failureThreshold }}
+        {{- end }}
         env:
         - name: DB_HOST
           value: {{ .Values.postgresql.host | quote }}
@@ -38,7 +72,7 @@ spec:
         - name: DB_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: {{ .Values.postgresql.existingSecret | default (include "edge-link.fullname" .) }}
+              name: {{ .Values.postgresql.existingSecret | default (include "edge-link-control-plane.fullname" .) }}
               key: postgresql-password
         - name: REDIS_HOST
           value: {{ .Values.redis.host | quote }}
@@ -47,7 +81,7 @@ spec:
         - name: REDIS_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: {{ .Values.redis.existingSecret | default (include "edge-link.fullname" .) }}
+              name: {{ .Values.redis.existingSecret | default (include "edge-link-control-plane.fullname" .) }}
               key: redis-password
         - name: LOG_LEVEL
           value: {{ .Values.alertService.logLevel | quote }}
@@ -60,7 +94,7 @@ spec:
         - name: SMTP_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: {{ .Values.alertService.smtp.existingSecret | default (include "edge-link.fullname" .) }}
+              name: {{ .Values.alertService.smtp.existingSecret | default (include "edge-link-control-plane.fullname" .) }}
               key: smtp-password
               optional: true
         resources:

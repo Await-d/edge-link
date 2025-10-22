@@ -297,6 +297,35 @@ check_node_deps() {
     return $issues
 }
 
+# Extract ARG values from Dockerfile
+extract_arg_value() {
+    local dockerfile="$1"
+    local arg_name="$2"
+
+    grep "^ARG ${arg_name}=" "$dockerfile" | head -1 | cut -d'=' -f2 | tr -d '"'
+}
+
+# Expand variables in image string
+expand_image_vars() {
+    local image="$1"
+    local dockerfile="$2"
+
+    # Find all ${VAR} patterns
+    while [[ $image =~ \$\{([A-Z_]+)\} ]]; do
+        local var_name="${BASH_REMATCH[1]}"
+        local var_value=$(extract_arg_value "$dockerfile" "$var_name")
+
+        if [ -z "$var_value" ]; then
+            # If not found, keep original
+            break
+        fi
+
+        image="${image//\$\{${var_name}\}/${var_value}}"
+    done
+
+    echo "$image"
+}
+
 # Fetch Docker image digest
 fetch_image_digest() {
     local image=$1
@@ -358,6 +387,15 @@ pin_docker_images() {
 
             # Extract image and tag
             local image_full=$(echo "$line" | awk '{print $2}')
+
+            # Strip existing digest if present
+            image_full="${image_full%%@*}"
+
+            # Expand ARG variables if present
+            if [[ $image_full =~ \$\{ ]]; then
+                image_full=$(expand_image_vars "$image_full" "$dockerfile")
+            fi
+
             local image_name=$(echo "$image_full" | cut -d':' -f1)
             local image_tag=$(echo "$image_full" | cut -d':' -f2)
 

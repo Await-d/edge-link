@@ -1,23 +1,23 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "edge-link.fullname" . }}-background-worker
+  name: {{ include "edge-link-control-plane.fullname" . }}-background-worker
   labels:
-    {{- include "edge-link.labels" . | nindent 4 }}
+    {{- include "edge-link-control-plane.labels" . | nindent 4 }}
     app.kubernetes.io/component: background-worker
 spec:
   replicas: {{ .Values.backgroundWorker.replicaCount }}
   selector:
     matchLabels:
-      {{- include "edge-link.selectorLabels" . | nindent 6 }}
+      {{- include "edge-link-control-plane.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: background-worker
   template:
     metadata:
       labels:
-        {{- include "edge-link.selectorLabels" . | nindent 8 }}
+        {{- include "edge-link-control-plane.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: background-worker
     spec:
-      serviceAccountName: {{ include "edge-link.serviceAccountName" . }}
+      serviceAccountName: {{ include "edge-link-control-plane.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.backgroundWorker.podSecurityContext | nindent 8 }}
       containers:
@@ -26,6 +26,40 @@ spec:
           {{- toYaml .Values.backgroundWorker.securityContext | nindent 12 }}
         image: "{{ .Values.backgroundWorker.image.repository }}:{{ .Values.backgroundWorker.image.tag | default .Chart.AppVersion }}"
         imagePullPolicy: {{ .Values.backgroundWorker.image.pullPolicy }}
+        ports:
+          - name: http
+            containerPort: {{ .Values.backgroundWorker.service.port }}
+            protocol: TCP
+        {{- if .Values.backgroundWorker.healthProbes.liveness.enabled }}
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.backgroundWorker.healthProbes.liveness.path }}
+            port: http
+          initialDelaySeconds: {{ .Values.backgroundWorker.healthProbes.liveness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.backgroundWorker.healthProbes.liveness.periodSeconds }}
+          timeoutSeconds: {{ .Values.backgroundWorker.healthProbes.liveness.timeoutSeconds }}
+          failureThreshold: {{ .Values.backgroundWorker.healthProbes.liveness.failureThreshold }}
+        {{- end }}
+        {{- if .Values.backgroundWorker.healthProbes.readiness.enabled }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.backgroundWorker.healthProbes.readiness.path }}
+            port: http
+          initialDelaySeconds: {{ .Values.backgroundWorker.healthProbes.readiness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.backgroundWorker.healthProbes.readiness.periodSeconds }}
+          timeoutSeconds: {{ .Values.backgroundWorker.healthProbes.readiness.timeoutSeconds }}
+          failureThreshold: {{ .Values.backgroundWorker.healthProbes.readiness.failureThreshold }}
+        {{- end }}
+        {{- if .Values.backgroundWorker.healthProbes.startup.enabled }}
+        startupProbe:
+          httpGet:
+            path: {{ .Values.backgroundWorker.healthProbes.startup.path }}
+            port: http
+          initialDelaySeconds: {{ .Values.backgroundWorker.healthProbes.startup.initialDelaySeconds }}
+          periodSeconds: {{ .Values.backgroundWorker.healthProbes.startup.periodSeconds }}
+          timeoutSeconds: {{ .Values.backgroundWorker.healthProbes.startup.timeoutSeconds }}
+          failureThreshold: {{ .Values.backgroundWorker.healthProbes.startup.failureThreshold }}
+        {{- end }}
         env:
         - name: DB_HOST
           value: {{ .Values.postgresql.host | quote }}
@@ -38,7 +72,7 @@ spec:
         - name: DB_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: {{ .Values.postgresql.existingSecret | default (include "edge-link.fullname" .) }}
+              name: {{ .Values.postgresql.existingSecret | default (include "edge-link-control-plane.fullname" .) }}
               key: postgresql-password
         - name: REDIS_HOST
           value: {{ .Values.redis.host | quote }}
@@ -47,7 +81,7 @@ spec:
         - name: REDIS_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: {{ .Values.redis.existingSecret | default (include "edge-link.fullname" .) }}
+              name: {{ .Values.redis.existingSecret | default (include "edge-link-control-plane.fullname" .) }}
               key: redis-password
         - name: LOG_LEVEL
           value: {{ .Values.backgroundWorker.logLevel | quote }}

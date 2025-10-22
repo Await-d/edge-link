@@ -101,4 +101,46 @@ spec:
     matchLabels:
       {{- include "edge-link-control-plane.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: frontend
+---
+{{- end }}
+{{- if .Values.alertService.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "edge-link-control-plane.fullname" . }}-alert-service
+  labels:
+    {{- include "edge-link-control-plane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: alert-service
+spec:
+  {{- if .Values.alertService.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.alertService.podDisruptionBudget.minAvailable }}
+  {{- end }}
+  {{- if .Values.alertService.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.alertService.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "edge-link-control-plane.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: alert-service
+---
+{{- end }}
+{{- if .Values.backgroundWorker.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "edge-link-control-plane.fullname" . }}-background-worker
+  labels:
+    {{- include "edge-link-control-plane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: background-worker
+spec:
+  {{- if .Values.backgroundWorker.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.backgroundWorker.podDisruptionBudget.minAvailable }}
+  {{- end }}
+  {{- if .Values.backgroundWorker.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.backgroundWorker.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "edge-link-control-plane.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: background-worker
 {{- end }}

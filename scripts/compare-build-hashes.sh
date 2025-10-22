@@ -78,9 +78,35 @@ EOF
     exit 1
 }
 
+# Check dependencies
+check_dependencies() {
+    local missing_deps=()
+
+    if ! command -v jq &> /dev/null; then
+        missing_deps+=("jq")
+    fi
+
+    if ! command -v sha256sum &> /dev/null; then
+        missing_deps+=("sha256sum")
+    fi
+
+    if [ ${#missing_deps[@]} -gt 0 ]; then
+        echo -e "${RED}Error: Missing required dependencies: ${missing_deps[*]}${NC}"
+        echo ""
+        echo "Install instructions:"
+        echo "  Ubuntu/Debian: sudo apt-get install -y jq coreutils"
+        echo "  macOS:         brew install jq coreutils"
+        echo "  Alpine:        apk add --no-cache jq coreutils"
+        return 1
+    fi
+
+    return 0
+}
+
 # Parse arguments
 parse_args() {
-    if [[ $# -eq 0 ]]; then
+    # Handle help flag first
+    if [[ "${1:-}" == "--help" ]] || [[ "${1:-}" == "-h" ]] || [[ $# -eq 0 ]]; then
         usage
     fi
 
@@ -385,6 +411,11 @@ clean_db() {
 # Main execution
 main() {
     parse_args "$@"
+
+    # Check dependencies before proceeding
+    if ! check_dependencies; then
+        exit 1
+    fi
 
     cd "$PROJECT_ROOT"
     init_db

@@ -32,6 +32,36 @@ spec:
             - name: grpc
               containerPort: {{ .Values.deviceService.service.port }}
               protocol: TCP
+          {{- if .Values.deviceService.healthProbes.liveness.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.deviceService.healthProbes.liveness.path }}
+              port: grpc
+            initialDelaySeconds: {{ .Values.deviceService.healthProbes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.deviceService.healthProbes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.deviceService.healthProbes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.deviceService.healthProbes.liveness.failureThreshold }}
+          {{- end }}
+          {{- if .Values.deviceService.healthProbes.readiness.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.deviceService.healthProbes.readiness.path }}
+              port: grpc
+            initialDelaySeconds: {{ .Values.deviceService.healthProbes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.deviceService.healthProbes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.deviceService.healthProbes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.deviceService.healthProbes.readiness.failureThreshold }}
+          {{- end }}
+          {{- if .Values.deviceService.healthProbes.startup.enabled }}
+          startupProbe:
+            httpGet:
+              path: {{ .Values.deviceService.healthProbes.startup.path }}
+              port: grpc
+            initialDelaySeconds: {{ .Values.deviceService.healthProbes.startup.initialDelaySeconds }}
+            periodSeconds: {{ .Values.deviceService.healthProbes.startup.periodSeconds }}
+            timeoutSeconds: {{ .Values.deviceService.healthProbes.startup.timeoutSeconds }}
+            failureThreshold: {{ .Values.deviceService.healthProbes.startup.failureThreshold }}
+          {{- end }}
           env:
             - name: DATABASE_HOST
               value: {{ include "edge-link-control-plane.fullname" . }}-postgresql

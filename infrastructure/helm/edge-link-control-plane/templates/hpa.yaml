@@ -186,4 +186,80 @@ spec:
   behavior:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+---
+{{- end }}
+{{- if .Values.alertService.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "edge-link-control-plane.fullname" . }}-alert-service
+  labels:
+    {{- include "edge-link-control-plane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: alert-service
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "edge-link-control-plane.fullname" . }}-alert-service
+  minReplicas: {{ .Values.alertService.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.alertService.autoscaling.maxReplicas }}
+  metrics:
+    {{- if .Values.alertService.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.alertService.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.alertService.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.alertService.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+  {{- with .Values.alertService.autoscaling.behavior }}
+  behavior:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+---
+{{- end }}
+{{- if .Values.backgroundWorker.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "edge-link-control-plane.fullname" . }}-background-worker
+  labels:
+    {{- include "edge-link-control-plane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: background-worker
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "edge-link-control-plane.fullname" . }}-background-worker
+  minReplicas: {{ .Values.backgroundWorker.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.backgroundWorker.autoscaling.maxReplicas }}
+  metrics:
+    {{- if .Values.backgroundWorker.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.backgroundWorker.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.backgroundWorker.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.backgroundWorker.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+  {{- with .Values.backgroundWorker.autoscaling.behavior }}
+  behavior:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 {{- end }}

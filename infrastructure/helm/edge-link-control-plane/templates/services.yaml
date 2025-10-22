@@ -103,3 +103,57 @@ spec:
     {{- include "edge-link-control-plane.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: nat-coordinator
 {{- end }}
+
+---
+
+# Alert Service
+{{- if .Values.alertService.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "edge-link-control-plane.fullname" . }}-alert-service
+  labels:
+    {{- include "edge-link-control-plane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: alert-service
+  {{- if .Values.alertService.service.annotations }}
+  annotations:
+    {{- toYaml .Values.alertService.service.annotations | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.alertService.service.type }}
+  ports:
+    - port: {{ .Values.alertService.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "edge-link-control-plane.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: alert-service
+{{- end }}
+
+---
+
+# Background Worker Service
+{{- if .Values.backgroundWorker.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "edge-link-control-plane.fullname" . }}-background-worker
+  labels:
+    {{- include "edge-link-control-plane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: background-worker
+  {{- if .Values.backgroundWorker.service.annotations }}
+  annotations:
+    {{- toYaml .Values.backgroundWorker.service.annotations | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.backgroundWorker.service.type }}
+  ports:
+    - port: {{ .Values.backgroundWorker.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "edge-link-control-plane.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: background-worker
+{{- end }}

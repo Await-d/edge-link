@@ -32,6 +32,36 @@ spec:
             - name: grpc
               containerPort: {{ .Values.topologyService.service.port }}
               protocol: TCP
+          {{- if .Values.topologyService.healthProbes.liveness.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.topologyService.healthProbes.liveness.path }}
+              port: grpc
+            initialDelaySeconds: {{ .Values.topologyService.healthProbes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.topologyService.healthProbes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.topologyService.healthProbes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.topologyService.healthProbes.liveness.failureThreshold }}
+          {{- end }}
+          {{- if .Values.topologyService.healthProbes.readiness.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.topologyService.healthProbes.readiness.path }}
+              port: grpc
+            initialDelaySeconds: {{ .Values.topologyService.healthProbes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.topologyService.healthProbes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.topologyService.healthProbes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.topologyService.healthProbes.readiness.failureThreshold }}
+          {{- end }}
+          {{- if .Values.topologyService.healthProbes.startup.enabled }}
+          startupProbe:
+            httpGet:
+              path: {{ .Values.topologyService.healthProbes.startup.path }}
+              port: grpc
+            initialDelaySeconds: {{ .Values.topologyService.healthProbes.startup.initialDelaySeconds }}
+            periodSeconds: {{ .Values.topologyService.healthProbes.startup.periodSeconds }}
+            timeoutSeconds: {{ .Values.topologyService.healthProbes.startup.timeoutSeconds }}
+            failureThreshold: {{ .Values.topologyService.healthProbes.startup.failureThreshold }}
+          {{- end }}
           env:
             - name: DATABASE_HOST
               value: {{ include "edge-link-control-plane.fullname" . }}-postgresql
