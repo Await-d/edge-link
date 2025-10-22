@@ -323,6 +323,78 @@ This document captures technical decisions, architectural patterns, and best pra
 
 ---
 
+## R13: Background Task Scheduling
+
+### Decision
+
+**Chosen**: robfig/cron (Go library) for background task scheduling in background-worker service
+
+### Rationale
+
+1. **Simplicity**: In-process scheduling without external dependencies; fits single-instance background-worker deployment model
+2. **Cron Syntax**: Familiar `0 */5 * * * *` syntax with seconds precision (standard cron only supports minute-level)
+3. **Low Overhead**: No distributed coordination needed; Kubernetes Deployment with `replicas=1` ensures single active scheduler
+4. **Constitutional Compliance**: Real task execution (not mocked scheduling); production-ready library (100k+ downloads)
+
+### Alternatives Considered
+
+- **Kubernetes CronJob**: Rejected because requires separate pods for each task; overhead for simple periodic checks (device health every 1min); harder to share database connections
+- **Redis Keyspace Notifications**: Rejected because TTL-based triggers not suitable for recurring schedules; violates separation of concerns (cache shouldn't drive business logic)
+- **Temporal/Cadence**: Rejected because workflow orchestration overkill for simple periodic tasks; adds operational complexity (separate cluster)
+
+### Implementation Notes
+
+- Location: `backend/cmd/background-worker/internal/scheduler/cron_scheduler.go`
+- Task definitions in `backend/cmd/background-worker/internal/tasks/`:
+  - `device_health.go`: Device offline detection (`0 * * * * *` - every minute)
+  - `performance_monitor.go`: Latency p95 checks (`0 */5 * * * *` - every 5 minutes)
+  - `security_monitor.go`: Failed auth detection (`0 * * * * *` - every minute)
+  - `key_expiry.go`: Key expiration warnings (`0 0 0 * * *` - daily at midnight)
+- Single-instance guarantee: Kubernetes Deployment with `replicas: 1`, no distributed locking required
+- Graceful shutdown: Cron stops accepting new tasks on SIGTERM, waits for running tasks (max 30s grace period)
+
+### Example Implementation
+
+```go
+import "github.com/robfig/cron/v3"
+
+func InitScheduler(deps *Dependencies) *cron.Cron {
+    c := cron.New(cron.WithSeconds()) // Enable seconds precision
+
+    // Device health check: every minute
+    c.AddFunc("0 * * * * *", func() {
+        tasks.CheckDeviceHealth(deps.DB, deps.Cache, deps.AlertService)
+    })
+
+    // Performance monitoring: every 5 minutes
+    c.AddFunc("0 */5 * * * *", func() {
+        tasks.MonitorPerformance(deps.DB, deps.MetricsRepo)
+    })
+
+    // Key expiration check: daily at midnight UTC
+    c.AddFunc("0 0 0 * * *", func() {
+        tasks.CheckKeyExpiry(deps.DB, deps.AlertService)
+    })
+
+    c.Start()
+    return c
+}
+```
+
+### Future Considerations
+
+- **High Availability**: If multi-replica background-worker needed in future, add Redis distributed locks (e.g., go-redsync) to prevent duplicate task execution
+- **Dynamic Scheduling**: Current implementation uses hardcoded schedules; v2.0 could support admin-configurable cron expressions via database
+
+### Relation to Requirements
+
+- **FR-025**: Background tasks for cleanup, key rotation, NAT testing, TURN health checks
+- **FR-020**: Alert threshold monitoring (device offline >5min, latency >500ms p95, failed auth >10/min, key expiration <30days)
+- **Constitution Principle II**: Complete implementation with proper error handling in each task function
+- **Constitution Principle V**: Task failures logged but don't crash scheduler; metrics exposed for observability
+
+---
+
 ## Summary
 
 All technical decisions satisfy functional requirements (FR-001 to FR-046) and comply with Edge-Link Constitution principles:

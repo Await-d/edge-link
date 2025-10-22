@@ -283,6 +283,8 @@ description: "Edge-Link核心系统的任务列表"
 
 **独立测试**: 在3个以上不同平台上安装客户端，使用相同虚拟网络注册，验证所有设备可以相互ping
 
+**⚠️ v1.0 Scope Note**: 移动客户端任务 (T141-T150) 已延期至 v2.0。US4 v1.0 范围仅包含 Windows、macOS 和 IoT 客户端。详见 spec.md FR-002。
+
 ### US4 Windows桌面客户端
 
 - [X] T137 [P] [US4] 实现平台特定代码（Windows） in clients/desktop/internal/platform/windows.go (Wintun集成，wireguard-go)

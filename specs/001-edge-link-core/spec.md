@@ -98,13 +98,22 @@ Users can install and use Edge-Link clients on diverse platforms (Linux, Windows
 #### Client Layer
 
 - **FR-001**: System MUST provide native clients for desktop platforms (Linux, Windows, macOS) supporting both GUI and CLI modes
-- **FR-002**: System MUST provide mobile apps for Android and iOS using official WireGuard SDKs
+- **FR-002**: System SHOULD provide mobile apps for Android and iOS using official WireGuard SDKs *(v2.0 enhancement)*
+  - **v1.0 Scope**: Desktop clients only (Linux, Windows, macOS)
+  - **Rationale**: MVP focuses on desktop/server deployments; mobile clients require additional platform expertise and App Store distribution
 - **FR-003**: System MUST provide lightweight CLI daemon for IoT and containerized environments (ARM and x86_64 architectures)
 - **FR-004**: Clients MUST generate cryptographically secure device keypairs (Ed25519 or Curve25519) on first run
 - **FR-005**: Clients MUST register with control plane via REST API (`/api/v1/device/register`) providing public key, device fingerprint, and network capabilities
 - **FR-006**: Clients MUST receive and locally store virtual IP address, subnet configuration, peer list, and STUN/TURN server addresses in encrypted format
 - **FR-007**: Clients MUST support one-click configuration import/export for backup and migration
 - **FR-008**: Clients MUST run a daemon process that monitors WireGuard interface health and auto-reconnects on failure
+  - **Health Metrics**:
+    - Tunnel Status: Interface up/down state
+    - Last Handshake: Must be < 3 minutes (WireGuard keepalive default: 25s)
+    - Packet Counters: TX/RX bytes increasing (validates data flow)
+    - Endpoint Reachability: ICMP ping to at least one peer succeeds
+  - **Failure Triggers**: Any metric failing for >60 seconds initiates reconnection attempt
+  - **Reconnection Strategy**: Exponential backoff (5s, 10s, 20s, max 60s intervals)
 - **FR-009**: Clients MUST perform NAT type detection using STUN protocol and attempt UDP hole punching for P2P connections
 - **FR-010**: Clients MUST fall back to TURN relay when direct P2P connection fails (symmetric NAT, firewall restrictions)
 - **FR-011**: Clients MUST send periodic heartbeats (every 30 seconds default) and metrics (bandwidth, latency, failure counts) to control plane
@@ -119,7 +128,15 @@ Users can install and use Edge-Link clients on diverse platforms (Linux, Windows
 - **FR-017**: System MUST maintain virtual network topology, assign IPs from configurable subnets, and generate peer routing policies
 - **FR-018**: System MUST coordinate NAT traversal by facilitating STUN-based capability exchange and TURN relay assignment
 - **FR-019**: System MUST record all administrative actions (device registration, revocation, key rotation, configuration changes) in audit logs with timestamps and actor identity
-- **FR-020**: System MUST trigger alerts based on configurable thresholds (device offline >5min, latency >500ms p95, failed auth >10/min, key expiration <30days)
+- **FR-020**: System MUST trigger alerts based on configurable thresholds with the following defaults:
+  - Device offline: >5 minutes
+  - Latency degradation: >500ms p95 sustained for >10 minutes
+  - Security: >10 failed auth attempts per minute
+  - Key expiration warning: <30 days until expiry
+  - **Configuration Mechanism**:
+    - v1.0: Hardcoded defaults (environment variables override)
+    - v2.0: Admin UI threshold editor with per-organization customization
+  - **Override Format**: `ALERT_THRESHOLD_DEVICE_OFFLINE=300` (seconds)
 - **FR-021**: System MUST deliver alerts via multiple channels (email, webhook, enterprise messaging integration)
 - **FR-022**: System MUST persist entity data (organizations, devices, keys, virtual networks, sessions, alerts, audit logs) in relational database (PostgreSQL)
 - **FR-023**: System MUST cache online device state, session tokens, heartbeat information, and rate limits in Redis with TTL management

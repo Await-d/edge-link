@@ -56,6 +56,9 @@ Edge-Link is an end-to-end direct connection system implementing WireGuard-based
 - Database: PostgreSQL handles up to 1M device records + 100M audit logs without sharding
 - Security: Pre-shared key authentication (external PKI/CA integration is future enhancement)
 - Deployment: Kubernetes with Helm charts, minimum 3-node cluster for HA
+- Alert Thresholds: MVP (v1.0) uses hardcoded defaults with environment variable overrides; UI-based threshold configuration planned for v2.0 (see spec.md FR-020)
+- Background Task Scheduling: Uses robfig/cron (Go library) for in-process task scheduling; see research.md R13 for rationale
+- Mobile Clients: iOS/Android apps deferred to v2.0 (spec.md FR-002); v1.0 focuses on desktop platforms
 
 **Scale/Scope**:
 - Devices: 100,000+ registered devices across 1,000+ virtual networks

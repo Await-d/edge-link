@@ -374,13 +374,79 @@ This document defines the entity-relationship model and database schema for the 
 - `organization_id` (UUID, FK → Organization.id, NOT NULL)
 - `email` (VARCHAR(255), UNIQUE, NOT NULL)
 - `full_name` (VARCHAR(255), NOT NULL)
-- `role` (ENUM: system_admin, network_operator, auditor): RBAC role
+- `role` (ENUM: system_admin, network_operator, auditor): RBAC role (deprecated - use AdminRole for v2.0)
 - `oidc_subject` (TEXT, NULLABLE): External identity provider subject ID
 - `created_at` (TIMESTAMP, NOT NULL)
 - `last_login_at` (TIMESTAMP, NULLABLE)
 
 **Relationships**:
 - N:1 with `Organization`
+- N:M with `AdminRole` (via `admin_user_roles` join table in v2.0)
+
+---
+
+### 12. AdminRole
+
+**Purpose**: Role-based access control (RBAC) definitions for granular permission management
+
+**Attributes**:
+- `id` (UUID, PK): Unique role identifier
+- `name` (VARCHAR(100), UNIQUE, NOT NULL): Role name (e.g., "system_admin", "network_operator", "auditor", "custom_role")
+- `description` (TEXT, NULLABLE): Human-readable role description
+- `is_system_role` (BOOLEAN, DEFAULT FALSE): System-defined role (cannot be deleted)
+- `permissions` (JSONB, NOT NULL): Array of permission strings (format: `resource:action`)
+- `created_at` (TIMESTAMP, NOT NULL): Role creation timestamp
+- `updated_at` (TIMESTAMP, NOT NULL): Last modification timestamp
+
+**Indexes**:
+- Primary key: `id`
+- Unique: `name`
+- Index: `is_system_role` (for filtering predefined roles)
+
+**Validation Rules**:
+- `name` must match regex `^[a-z_]+$` (lowercase letters and underscores only)
+- System roles (`is_system_role` = TRUE) cannot be deleted or have their `permissions` modified
+- `permissions` must be valid JSON array of strings
+
+**Relationships**:
+- N:M with `AdminUser` (via `admin_user_roles` join table)
+
+**Permission Matrix** (System Predefined Roles):
+
+| Role Name | Permissions | Description |
+|-----------|-------------|-------------|
+| **system_admin** | `["*:*"]` | Full access to all resources and actions |
+| **network_operator** | `["device:read", "device:write", "device:delete", "network:read", "network:write", "alert:*", "audit:read"]` | Device and network management with alert handling |
+| **auditor** | `["device:read", "network:read", "alert:read", "audit:read", "audit:export"]` | Read-only access for compliance auditing |
+
+**Permission Format**: `resource:action`
+- **Resources**: `device`, `network`, `pre_shared_key`, `alert`, `audit`, `user`, `config`
+- **Actions**: `read`, `write`, `delete`, `export`, `*` (wildcard)
+- **Examples**:
+  - `device:read` - View device details
+  - `network:*` - All network operations
+  - `*:*` - Full admin access
+
+**Example Data**:
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440001",
+  "name": "system_admin",
+  "description": "完全管理员权限 (Full administrative access)",
+  "is_system_role": true,
+  "permissions": ["*:*"],
+  "created_at": "2025-10-19T00:00:00Z",
+  "updated_at": "2025-10-19T00:00:00Z"
+}
+```
+
+**Database Migrations**:
+- `000012_create_admin_roles.up.sql` - Create `admin_roles` table
+- `000013_create_admin_user_roles.up.sql` - Create `admin_user_roles` join table (many-to-many)
+
+**v1.0 vs v2.0**:
+- **v1.0**: Uses simple ENUM role in `AdminUser.role` (backward compatibility)
+- **v2.0**: Migrates to separate `AdminRole` table with granular permissions and custom role support
 
 ---
 
