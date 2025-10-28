@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useCallback } from 'react'
 import { deviceApi, networkApi, alertApi, auditApi, statsApi, topologyApi } from '@/services/api'
+import { wsClient, WebSocketEventTypes } from '@/services/websocketClient'
 import { message } from 'antd'
 import { transformToTopology } from '@/utils/topology'
 
@@ -210,4 +212,158 @@ export const useTopologyData = () => {
     refetchInterval: 10000, // 每10秒刷新
     refetchIntervalInBackground: true,
   })
+}
+
+// WebSocket实时更新hooks
+export const useWebSocketConnection = () => {
+  useEffect(() => {
+    // 组件挂载时连接WebSocket
+    wsClient.connect().catch(console.error)
+
+    // 组件卸载时断开连接
+    return () => {
+      wsClient.disconnect()
+    }
+  }, [])
+}
+
+export const useDeviceStatusUpdates = (onDeviceStatusUpdate: (data: any) => void) => {
+  useWebSocketConnection()
+
+  useEffect(() => {
+    const unsubscribe = wsClient.subscribe(
+      WebSocketEventTypes.DEVICE_STATUS,
+      onDeviceStatusUpdate
+    )
+
+    return unsubscribe
+  }, [onDeviceStatusUpdate])
+}
+
+export const useAlertUpdates = (onAlertCreated: (data: any) => void, onAlertUpdated?: (data: any) => void) => {
+  useWebSocketConnection()
+
+  useEffect(() => {
+    const unsubscribes: (() => void)[] = []
+
+    unsubscribes.push(
+      wsClient.subscribe(WebSocketEventTypes.ALERT_CREATED, onAlertCreated)
+    )
+
+    if (onAlertUpdated) {
+      unsubscribes.push(
+        wsClient.subscribe(WebSocketEventTypes.ALERT_UPDATED, onAlertUpdated)
+      )
+    }
+
+    return () => {
+      unsubscribes.forEach(unsubscribe => unsubscribe())
+    }
+  }, [onAlertCreated, onAlertUpdated])
+}
+
+export const useMetricsUpdates = (onMetricsUpdate: (data: any) => void) => {
+  useWebSocketConnection()
+
+  useEffect(() => {
+    const unsubscribe = wsClient.subscribe(
+      WebSocketEventTypes.METRICS_UPDATE,
+      onMetricsUpdate
+    )
+
+    return unsubscribe
+  }, [onMetricsUpdate])
+}
+
+export const useSessionUpdates = (onSessionUpdate: (data: any) => void) => {
+  useWebSocketConnection()
+
+  useEffect(() => {
+    const unsubscribe = wsClient.subscribe(
+      WebSocketEventTypes.SESSION_UPDATE,
+      onSessionUpdate
+    )
+
+    return unsubscribe
+  }, [onSessionUpdate])
+}
+
+// 实时数据hooks - 结合React Query和WebSocket
+export const useRealTimeDevices = () => {
+  const queryClient = useQueryClient()
+
+  // 监听设备状态更新
+  useDeviceStatusUpdates((data) => {
+    // 更新查询缓存
+    queryClient.setQueryData(['devices'], (oldData: any) => {
+      if (!oldData?.devices) return oldData
+
+      const updatedDevices = oldData.devices.map((device: any) =>
+        device.id === data.device_id ? { ...device, ...data } : device
+      )
+
+      return { ...oldData, devices: updatedDevices }
+    })
+  })
+
+  return useDevices()
+}
+
+export const useRealTimeAlerts = () => {
+  const queryClient = useQueryClient()
+
+  // 监听告警创建和更新
+  useAlertUpdates(
+    (data) => {
+      // 新告警创建，添加到列表
+      queryClient.setQueryData(['alerts'], (oldData: any) => {
+        if (!oldData?.alerts) return oldData
+        return {
+          ...oldData,
+          alerts: [data, ...oldData.alerts],
+          total: oldData.total + 1,
+        }
+      })
+
+      // 显示通知
+      message.warning(`新告警: ${data.message}`)
+    },
+    (data) => {
+      // 告警更新，修改现有数据
+      queryClient.setQueryData(['alerts'], (oldData: any) => {
+        if (!oldData?.alerts) return oldData
+
+        const updatedAlerts = oldData.alerts.map((alert: any) =>
+          alert.id === data.id ? { ...alert, ...data } : alert
+        )
+
+        return { ...oldData, alerts: updatedAlerts }
+      })
+
+      // 如果告警被确认或解决，显示通知
+      if (data.status === 'acknowledged' || data.status === 'resolved') {
+        message.success(`告警已${data.status === 'acknowledged' ? '确认' : '解决'}`)
+      }
+    }
+  )
+
+  return useAlerts()
+}
+
+export const useRealTimeTopology = () => {
+  const queryClient = useQueryClient()
+
+  // 监听会话更新
+  useSessionUpdates((data) => {
+    // 更新拓扑数据
+    queryClient.setQueryData(['topology'], (oldData: any) => {
+      if (!oldData) return oldData
+
+      // 这里可以根据会话更新数据来调整拓扑图
+      // 例如更新连接状态、延迟等信息
+      return oldData
+    })
+  })
+
+  return useTopologyData()
 }

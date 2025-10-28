@@ -64,6 +64,11 @@ func main() {
 		fx.Provide(
 			handler.NewDeviceHandler,
 			handler.NewAdminHandler,
+		)
+
+		// WebSocket处理器
+		fx.Provide(
+			websocket.NewWebSocketHandler,
 		),
 
 		// 审计中间件
@@ -78,6 +83,9 @@ func main() {
 
 		// HTTP服务器
 		fx.Invoke(runHTTPServer),
+
+		// WebSocket广播器
+		fx.Invoke(startWebSocketBroadcaster),
 	)
 
 	app.Run()
@@ -136,4 +144,24 @@ func runHTTPServer(
 		<-sigCh
 		log.Info("Received shutdown signal")
 	}()
+}
+
+// startWebSocketBroadcaster 启动WebSocket广播器
+func startWebSocketBroadcaster(
+	lifecycle fx.Lifecycle,
+	log *zap.Logger,
+	wsHandler *websocket.WebSocketHandler,
+) {
+	lifecycle.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			log.Info("Starting WebSocket broadcaster")
+			// WebSocket广播器已经在NewWebSocketHandler中启动
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			log.Info("Stopping WebSocket broadcaster")
+			wsHandler.Shutdown()
+			return nil
+		},
+	})
 }

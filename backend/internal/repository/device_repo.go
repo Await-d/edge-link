@@ -17,6 +17,7 @@ type DeviceRepository interface {
 	Update(ctx context.Context, device *domain.Device) error
 	UpdateOnlineStatus(ctx context.Context, id uuid.UUID, online bool) error
 	Delete(ctx context.Context, id uuid.UUID) error
+	CountByOrganization(ctx context.Context, orgID *uuid.UUID) (int, error)
 }
 
 type deviceRepository struct {
@@ -87,4 +88,17 @@ func (r *deviceRepository) UpdateOnlineStatus(ctx context.Context, id uuid.UUID,
 
 func (r *deviceRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	return r.db.WithContext(ctx).Delete(&domain.Device{}, "id = ?", id).Error
+}
+
+func (r *deviceRepository) CountByOrganization(ctx context.Context, orgID *uuid.UUID) (int, error) {
+	var count int64
+	query := r.db.WithContext(ctx).Model(&domain.Device{})
+
+	if orgID != nil {
+		query = query.Joins("JOIN virtual_networks ON devices.virtual_network_id = virtual_networks.id").
+			Where("virtual_networks.organization_id = ?", *orgID)
+	}
+
+	err := query.Count(&count).Error
+	return int(count), err
 }

@@ -47,6 +47,12 @@ type AlertRepository interface {
 	// FindActiveByDeviceAndType 查找设备的特定类型的活跃告警
 	FindActiveByDeviceAndType(ctx context.Context, deviceID uuid.UUID, alertType domain.AlertType) (*domain.Alert, error)
 
+	// CountByStatus 根据状态统计告警数量
+	CountByStatus(ctx context.Context, status domain.AlertStatus) (int, error)
+
+	// CountBySeverity 根据严重程度统计告警数量
+	CountBySeverity(ctx context.Context, severity domain.Severity) (int, error)
+
 	// ResolveByDeviceAndType 解决设备的特定类型告警
 	ResolveByDeviceAndType(ctx context.Context, deviceID uuid.UUID, alertType domain.AlertType) error
 
@@ -358,4 +364,24 @@ func (r *alertRepository) GetAlertStats(ctx context.Context, startTime, endTime 
 	}
 
 	return &stats, nil
+}
+
+// CountByStatus 根据状态统计告警数量
+func (r *alertRepository) CountByStatus(ctx context.Context, status domain.AlertStatus) (int, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&domain.Alert{}).
+		Where("status = ?", status).
+		Count(&count).Error
+	return int(count), err
+}
+
+// CountBySeverity 根据严重程度统计告警数量
+func (r *alertRepository) CountBySeverity(ctx context.Context, severity domain.Severity) (int, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&domain.Alert{}).
+		Where("severity = ?", severity).
+		Count(&count).Error
+	return int(count), err
 }

@@ -38,6 +38,18 @@ type SessionRepository interface {
 	// UpdateMetrics 更新会话指标
 	UpdateMetrics(ctx context.Context, id uuid.UUID, bytesSent, bytesReceived int64, avgLatencyMs *int) error
 
+	// FindByDevice 查找设备的会话
+	FindByDevice(ctx context.Context, deviceID uuid.UUID) ([]*domain.Session, error)
+
+	// FindByDeviceTimeRange 查找设备在指定时间范围的会话
+	FindByDeviceTimeRange(ctx context.Context, deviceID uuid.UUID, startTime, endTime time.Time) ([]*domain.Session, error)
+
+	// FindActive 查找所有活跃会话
+	FindActive(ctx context.Context) ([]*domain.Session, error)
+
+	// CountActive 统计活跃会话数量
+	CountActive(ctx context.Context) (int, error)
+
 	// GetSessionStats 获取会话统计信息
 	GetSessionStats(ctx context.Context, startTime, endTime time.Time) (*SessionStats, error)
 }
@@ -252,4 +264,44 @@ func (r *sessionRepository) GetSessionStats(ctx context.Context, startTime, endT
 	stats.TotalBytesTransferred = totalBytes
 
 	return &stats, nil
+}
+
+// FindByDevice 查找设备的会话
+func (r *sessionRepository) FindByDevice(ctx context.Context, deviceID uuid.UUID) ([]*domain.Session, error) {
+	var sessions []*domain.Session
+	err := r.db.WithContext(ctx).
+		Where("device_a_id = ? OR device_b_id = ?", deviceID, deviceID).
+		Order("started_at DESC").
+		Find(&sessions).Error
+	return sessions, err
+}
+
+// FindByDeviceTimeRange 查找设备在指定时间范围的会话
+func (r *sessionRepository) FindByDeviceTimeRange(ctx context.Context, deviceID uuid.UUID, startTime, endTime time.Time) ([]*domain.Session, error) {
+	var sessions []*domain.Session
+	err := r.db.WithContext(ctx).
+		Where("(device_a_id = ? OR device_b_id = ?) AND started_at BETWEEN ? AND ?", deviceID, deviceID, startTime, endTime).
+		Order("started_at DESC").
+		Find(&sessions).Error
+	return sessions, err
+}
+
+// FindActive 查找所有活跃会话
+func (r *sessionRepository) FindActive(ctx context.Context) ([]*domain.Session, error) {
+	var sessions []*domain.Session
+	err := r.db.WithContext(ctx).
+		Where("ended_at IS NULL").
+		Order("started_at DESC").
+		Find(&sessions).Error
+	return sessions, err
+}
+
+// CountActive 统计活跃会话数量
+func (r *sessionRepository) CountActive(ctx context.Context) (int, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&domain.Session{}).
+		Where("ended_at IS NULL").
+		Count(&count).Error
+	return int(count), err
 }
